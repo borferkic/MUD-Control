@@ -1,0 +1,89 @@
+=====================================================================
+  KIT RDP WRAPPER  -  Varios usuarios conectados a la vez por
+  Escritorio remoto en Windows 11 Pro
+=====================================================================
+
+QUE ES ESTO
+  Windows 11 Pro solo permite 1 sesion de Escritorio remoto. RDP Wrapper
+  lo amplia (aqui: hasta 20). Cada vez que Windows Update cambia el archivo
+  C:\Windows\System32\termsrv.dll, RDP Wrapper deja de funcionar hasta
+  que su archivo rdpwrap.ini recibe los datos de la nueva version.
+
+---------------------------------------------------------------------
+ USO RAPIDO (cualquier persona)
+---------------------------------------------------------------------
+  1. Doble clic en  Instalador-RDPWrapper.exe
+  2. Aceptar el aviso "Desea permitir que esta aplicacion..." (SI).
+     Hay que estar en una cuenta de administrador.
+  3. Elegir en el menu:
+       1 = Instalacion completa   (equipo nuevo / reinstalar)
+       2 = Reparar RDP            (despues de una actualizacion de Windows)
+       3 = Reparar Windows Update
+       4 = Verificar estado
+       5 = Desinstalar
+  Al reparar, las sesiones remotas se cortan unos segundos: reconectarse.
+
+  Sin menu (desatendido):   Instalador-RDPWrapper.exe  y luego en la
+  carpeta C:\ProgramData\RDPWrapperKit:   instalar.bat 1 /auto
+
+---------------------------------------------------------------------
+ SINTOMA: "solo se puede conectar 1 usuario" / se desconecta al otro
+---------------------------------------------------------------------
+  -> Opcion 2 (Reparar RDP), o ejecutar como administrador:
+     C:\Program Files\RDP Wrapper\fix-rdpwrap.bat
+  Resultado en: C:\Program Files\RDP Wrapper\fix-rdpwrap.log
+
+  Codigos de salida de fix-rdpwrap.bat:
+    0 = OK, multisesion funcionando
+    7 = Aun no hay rdpwrap.ini publico para la nueva version de Windows.
+        Es normal los primeros dias tras una actualizacion. La tarea
+        "RDPWrap-AutoFix" reintenta sola en cada arranque. Reiniciar el
+        equipo cada 1-2 dias o ejecutar la opcion 2 de nuevo.
+    8 = Defender bloqueo el generador de offsets (ver abajo).
+    2/3 = RDP Wrapper no instalado -> opcion 1.
+
+---------------------------------------------------------------------
+ AVANZADO: generar los datos sin esperar  (fix-rdpwrap.bat /finder)
+---------------------------------------------------------------------
+  Descarga RDPWrapOffsetFinder (github.com/llccd/RDPWrapOffsetFinder),
+  que calcula los datos de la nueva termsrv.dll con los simbolos publicos
+  de Microsoft.
+  "Defender bloquea el generador": el 13/11/2026 Microsoft Defender lo
+  detecto como Trojan:Win32/Suschil!rfn (deteccion heuristica). Solo un
+  responsable tecnico debe decidir si confia en el; en ese caso agregar en
+  Seguridad de Windows una exclusion para C:\Program Files\RDP Wrapper\OffsetFinder
+  y volver a ejecutar  fix-rdpwrap.bat /finder
+
+---------------------------------------------------------------------
+ CONFIGURACION QUE APLICA LA INSTALACION (editable en kit.ps1, $Cfg)
+---------------------------------------------------------------------
+  - Escritorio remoto habilitado, puerto 3389, firewall abierto TCP/UDP
+  - Multisesion: fSingleSessionPerUser=0, MaxInstanceCount=20
+  - Reconexion automatica permitida, Shadow=1
+  - NLA = 0 (igual que este equipo hoy). RECOMENDADO cambiar a 1.
+  - Usuarios de $Cfg.UsuariosRDP en "Usuarios de escritorio remoto"
+    (los administradores ya pueden conectarse)
+  - Exclusion de Defender para C:\Program Files\RDP Wrapper (pregunta antes)
+  - Tarea programada RDPWrap-AutoFix (al iniciar Windows)
+
+---------------------------------------------------------------------
+ WINDOWS UPDATE NO INSTALA (diagnostico 13/11/2026)
+---------------------------------------------------------------------
+  "Windows 11, version 26H2" fallaba con 0x800706BE: almacen de
+  componentes danado (CBS.log 800f0983). Opcion 3 = DISM + SFC + reset de
+  cache + reinicio. Despues de actualizar, usar la opcion 2.
+
+  Reparacion parcial 13/11/2026: SFC reparo archivos; DISM fallo (0x800f0915)
+  y 26H2 siguio fallando. Solucion definitiva pendiente: reparacion in situ
+  con la ISO oficial de Windows 11 (conservar archivos y aplicaciones).
+
+---------------------------------------------------------------------
+ BLOQUEAR ACTUALIZACIONES (opciones 6 y 7)
+---------------------------------------------------------------------
+  bloquear-actualizaciones.bat  pausa Windows Update hasta el 30/12/2026,
+  fija la version en 25H2 (no vuelve a intentar 26H2), solo notifica y no
+  reinicia con usuarios conectados. Defender sigue actualizando firmas.
+  Revertir: opcion 7  o  bloquear-actualizaciones.bat /desbloquear
+  OJO: sin parches de seguridad mensuales mientras dure la pausa.
+
+Logs: C:\Windows\Logs\kit-rdpwrapper.log y reparar-windowsupdate.log
