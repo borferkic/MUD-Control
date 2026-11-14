@@ -1,15 +1,43 @@
 import {
-  IconArrowBackUp, IconDeviceFloppy, IconEye, IconFileExport, IconFileImport, IconLifebuoy, IconLock, IconShieldCheck, IconUsb,
+  IconArrowBackUp, IconDeviceFloppy, IconDownload, IconRefresh, IconEye, IconFileExport, IconFileImport, IconLifebuoy, IconLock, IconShieldCheck, IconUsb,
 } from '@tabler/icons-react'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useApp } from '../App'
 import { Button, Confirm, Heading, Row, Switch } from '../components/ui'
-import { api, inTauri } from '../lib/backend'
+import { api, inTauri, type UpdateInfo } from '../lib/backend'
 import { when } from '../lib/format'
 import { translateReason, useT, type LangPref } from '../lib/i18n'
 import type { Backup, Settings } from '../lib/types'
 import { useLoad } from '../lib/useLoad'
 import { Specialist } from './Specialist'
+
+/** Buscar actualizaciones a mano (tambien desde la bandeja) y "Actualizar ahora". */
+function UpdateRow() {
+  const { notify, updateRequest } = useApp()
+  const { t } = useT()
+  const [state, setState] = useState<'idle' | 'checking' | 'installing'>('idle')
+  const [info, setInfo] = useState<UpdateInfo | null>(null)
+  const [error, setError] = useState(false)
+  const check = useCallback(async () => {
+    setState('checking'); setError(false)
+    try { setInfo(await api.updateCheck()) } catch (e) { console.error(e); setError(true) }
+    setState('idle')
+  }, [])
+  useEffect(() => { if (updateRequest) check() }, [updateRequest, check])
+  async function install() {
+    setState('installing')
+    try { if (!(await api.updateInstall())) notify(t('upd.latest', { v: info?.current ?? '' })) } catch (e) { console.error(e); setError(true) }
+    setState('idle')
+  }
+  const hint = error ? t('upd.offline') : !info ? undefined : info.version ? t('upd.found', { v: info.version }) : t('upd.latest', { v: info.current })
+  return (
+    <Row title={t('upd.check')} hint={hint}>
+      {info?.version
+        ? <Button primary icon={IconDownload} disabled={state !== 'idle'} onClick={install}>{t(state === 'installing' ? 'upd.installing' : 'upd.install')}</Button>
+        : <Button tone="purple" icon={IconRefresh} disabled={state !== 'idle'} onClick={check}>{t(state === 'checking' ? 'upd.checking' : 'upd.check')}</Button>}
+    </Row>
+  )
+}
 
 export function SettingsScreen() {
   const { notify, fail, refresh } = useApp()
@@ -51,9 +79,10 @@ export function SettingsScreen() {
                 .then(() => notify(t(e.target.value ? 'set.paused' : 'set.resumed'))).catch(fail)
             }} />
         </Row>
-        <Row title={t('set.autoUpdate')}>
+        <Row title={t('set.autoUpdate')} hint={t('set.autoUpdateHint')}>
           <Switch label={t('set.autoUpdate')} tone="purple" checked={s?.autoUpdateApp ?? false} onChange={v => save({ autoUpdateApp: v })} />
         </Row>
+        <UpdateRow />
         <Row title={t('set.startup')} hint={t('set.startupHint')}>
           <Switch label={t('set.startup')} tone="pink" checked={s?.startWithWindows ?? false} onChange={v => save({ startWithWindows: v })} />
         </Row>

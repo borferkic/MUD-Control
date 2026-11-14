@@ -13,6 +13,7 @@ use serde_json::Value;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, WindowEvent};
+use tauri_plugin_updater::UpdaterExt;
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -109,10 +110,74 @@ async fn backend(app: AppHandle, action: String, args: Value) -> Result<Value, S
     r
 }
 
+// ------------------------------------------------------------ actualizaciones
+// Busca en latest.json de las releases de GitHub. Las versiones van firmadas:
+// el plugin rechaza cualquier instalador que no tenga la firma de la clave publica.
+
+/// Devuelve `{ current, version }`; `version` es null si ya es la ultima.
+#[tauri::command]
+async fn update_check(app: AppHandle) -> Result<Value, String> {
+    let current = app.package_info().version.to_string();
+    let found = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    app_log(&format!("[update_check] actual {current}, nueva {:?}", found.as_ref().map(|u| &u.version)));
+    Ok(serde_json::json!({ "current": current, "version": found.map(|u| u.version) }))
+}
+
+async fn install_update(app: &AppHandle) -> Result<bool, String> {
+    let Some(u) = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())? else {
+        return Ok(false);
+    };
+    app_log(&format!("[update] instalando {}", u.version));
+    u.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+    // En Windows el instalador cierra la app; por si acaso, reiniciar.
+    app.restart();
+}
+
+#[tauri::command]
+async fn update_install(app: AppHandle) -> Result<bool, String> {
+    let r = install_update(&app).await;
+    if let Err(e) = &r {
+        app_log(&format!("[update_install] ERROR {e}"));
+    }
+    r
+}
+
+/// Al abrir y cada 6 horas. Si "Actualizar automaticamente" esta activado, instala
+/// solo cuando no hay nadie conectado; si no, avisa a la interfaz.
+fn auto_update_loop(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio_sleep(60).await;
+        loop {
+            if let Ok(Some(u)) = async { app.updater()?.check().await }.await {
+                let _ = app.emit("update-available", u.version.clone());
+                let a = app.clone();
+                let ready = tauri::async_runtime::spawn_blocking(move || {
+                    let auto = run_backend(&a, "get_settings", &serde_json::json!({})).ok()
+                        .and_then(|s| s.get("autoUpdateApp").and_then(Value::as_bool)).unwrap_or(false);
+                    let nobody = run_backend(&a, "get_status", &serde_json::json!({})).ok()
+                        .and_then(|s| s.get("connected").and_then(Value::as_u64)) == Some(0);
+                    auto && nobody
+                }).await.unwrap_or(false);
+                if ready {
+                    if let Err(e) = install_update(&app).await {
+                        app_log(&format!("[update auto] ERROR {e}"));
+                    }
+                }
+            }
+            tokio_sleep(6 * 3600).await;
+        }
+    });
+}
+
+async fn tokio_sleep(secs: u64) {
+    let _ = tauri::async_runtime::spawn_blocking(move || std::thread::sleep(std::time::Duration::from_secs(secs))).await;
+}
+
 // ------------------------------------------------------------------ bandeja
 struct TrayItems {
     open: MenuItem<tauri::Wry>,
     fix: MenuItem<tauri::Wry>,
+    update: MenuItem<tauri::Wry>,
     quit: MenuItem<tauri::Wry>,
 }
 
@@ -126,9 +191,10 @@ fn show_main(app: &AppHandle) {
 
 /// La interfaz traduce el menu de la bandeja cuando cambia el idioma.
 #[tauri::command]
-fn tray_labels(items: tauri::State<'_, TrayItems>, tooltip: String, open: String, fix: String, quit: String, app: AppHandle) {
+fn tray_labels(items: tauri::State<'_, TrayItems>, tooltip: String, open: String, fix: String, update: String, quit: String, app: AppHandle) {
     let _ = items.open.set_text(open);
     let _ = items.fix.set_text(fix);
+    let _ = items.update.set_text(update);
     let _ = items.quit.set_text(quit);
     if let Some(t) = app.tray_by_id("main") {
         let _ = t.set_tooltip(Some(tooltip));
@@ -144,13 +210,15 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![backend, tray_labels])
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![backend, tray_labels, update_check, update_install])
         .setup(move |app| {
             let open = MenuItem::with_id(app, "open", "Abrir MUD Control", true, None::<&str>)?;
             let fix = MenuItem::with_id(app, "fix", "Arreglar ahora", true, None::<&str>)?;
+            let update = MenuItem::with_id(app, "update", "Buscar actualizaciones", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
             let sep = PredefinedMenuItem::separator(app)?;
-            let menu = Menu::with_items(app, &[&open, &fix, &sep, &quit])?;
+            let menu = Menu::with_items(app, &[&open, &fix, &update, &sep, &quit])?;
             let mut tray = TrayIconBuilder::with_id("main")
                 .tooltip("MUD Control")
                 .menu(&menu)
@@ -160,6 +228,10 @@ pub fn run() {
                     "fix" => {
                         show_main(app);
                         let _ = app.emit("tray-fix", ());
+                    }
+                    "update" => {
+                        show_main(app);
+                        let _ = app.emit("tray-update", ());
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -173,7 +245,8 @@ pub fn run() {
                 tray = tray.icon(icon.clone());
             }
             tray.build(app)?;
-            app.manage(TrayItems { open, fix, quit });
+            app.manage(TrayItems { open, fix, update, quit });
+            auto_update_loop(app.handle().clone());
             if !hidden {
                 show_main(app.handle());
             }

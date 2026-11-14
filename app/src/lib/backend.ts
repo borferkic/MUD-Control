@@ -7,6 +7,8 @@ import type {
 } from './types'
 import { mock } from './mock'
 
+export interface UpdateInfo { current: string; version: string | null }
+
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
 // Todas las acciones pasan por un unico comando Rust que ejecuta backend.ps1.
@@ -78,6 +80,11 @@ export const api = {
   openLogs: () => call<void>('open_logs'),
   reinstall: () => call<void>('reinstall'),
   uninstall: () => call<void>('uninstall'),
+
+  /** Busca una version nueva de MUD Control. `version` es null si ya es la ultima. */
+  updateCheck: () => inTauri ? invoke<UpdateInfo>('update_check') : mock('update_check') as Promise<UpdateInfo>,
+  /** Descarga e instala la version nueva; la app se cierra y se vuelve a abrir. */
+  updateInstall: () => inTauri ? invoke<boolean>('update_install') : mock('update_install') as Promise<boolean>,
 }
 
 export async function onFixStep(cb: (step: FixStep) => void): Promise<() => void> {

@@ -5,6 +5,8 @@
   </picture>
   <h1>MUD Control: Multi User Desktops Control</h1>
 
+  <p><b>Español</b> · <a href="README.en.md">English</a></p>
+
   <a href="https://github.com/borferkic/MUD-Control/releases/latest"><img src="https://img.shields.io/github/v/release/borferkic/MUD-Control?style=flat-square&color=2ea44f" alt="Última versión" /></a>
   <a href="https://github.com/borferkic/MUD-Control/commits/master"><img src="https://img.shields.io/github/last-commit/borferkic/MUD-Control?style=flat-square&color=555" alt="Último commit" /></a>
   <img src="https://img.shields.io/badge/Windows-11%20Pro-0078D6?style=flat-square" alt="Windows 11 Pro" />
@@ -63,10 +65,9 @@ La app sigue el tema claro u oscuro de Windows, con la paleta Synthwave '84, y e
 
 ## Instalación
 
-1. Descarga `MUD Control_x.y.z_x64-setup.exe` de la [última versión](https://github.com/borferkic/MUD-Control/releases/latest).
+1. Descarga `MUD-Control_x.y.z_x64-setup.exe` de la [última versión](https://github.com/borferkic/MUD-Control/releases/latest).
 2. Ejecútalo con una cuenta de administrador. El instalador incluye todo lo necesario y no pide Internet.
-3. Abre **MUD Control**. La primera vez, un especialista debe hacer la instalación de RDP Wrapper
-   desde **Ajustes → Opciones para especialistas → Instalación → Reinstalar**.
+3. Abre **MUD Control** y pulsa **Instalar** en Inicio para instalar RDP Wrapper.
 
 > [!WARNING]
 > **Antivirus.** Microsoft Defender suele marcar `rdpwrap.dll` como *HackTool*. La instalación
@@ -79,7 +80,7 @@ La app sigue el tema claro u oscuro de Windows, con la paleta Synthwave '84, y e
 | **Inicio** | Estado en una frase. Si Windows desactivó las conexiones múltiples aparece **Arreglar ahora**. |
 | **Conectados** | Quién está usando el equipo y desde dónde. Enviar un mensaje, desconectar o cerrar una sesión colgada. |
 | **Accesos** | Qué cuentas pueden conectarse. Dar o quitar acceso. |
-| **Ajustes** | Reparación automática, avisos, pausa de Windows Update, copias de seguridad, exportar e importar la configuración. |
+| **Ajustes** | Reparación automática, avisos, pausa de Windows Update, copias de seguridad, exportar e importar la configuración, actualizaciones de la app. |
 | **Actividad** | Botón arriba a la derecha: historial de todo lo que pasó, en palabras sencillas. |
 
 Las **Opciones para especialistas** están al final de Ajustes, cerradas por defecto, y se agrupan
@@ -88,6 +89,14 @@ reparación avanzada, diagnóstico e instalación.
 
 La explicación completa de cada función y de cómo trabaja por dentro está en
 [**docs/como-funciona.md**](docs/como-funciona.md).
+
+## Actualizaciones de la app
+
+MUD Control busca versiones nuevas en las releases de GitHub al abrirse y cada 6 horas.
+Con **Ajustes → Actualizar MUD Control automáticamente** activado, la instala sola cuando no hay
+nadie conectado; si no, avisa y se actualiza con **Ajustes → Buscar actualizaciones → Actualizar ahora**
+(también desde el icono de la bandeja). Cada versión va firmada y la app rechaza cualquier archivo
+sin esa firma. Las instalaciones anteriores a la 2.2.0 deben actualizarse a mano una vez.
 
 ## Sin Internet
 

@@ -90,34 +90,37 @@ export function Home() {
     )
   }
 
-  if (!status) return <p className="muted">{t('home.checking')}</p>
-
-  const bad = status.health !== 'ok'
-  const n = status.connected
-  const title = t(status.health === 'not_installed' ? 'home.notInstalled' : bad ? 'home.broken' : 'home.ok')
-  const sub = status.health === 'not_installed' ? t(installing ? 'home.installing' : 'home.installSub')
+  // Mientras llega la primera revision se ve todo, con "…" en las cifras.
+  const loading = !status
+  const dots = '…'
+  const bad = !!status && status.health !== 'ok'
+  const n = status?.connected ?? 0
+  const title = !status ? t('home.checking') : t(status.health === 'not_installed' ? 'home.notInstalled' : bad ? 'home.broken' : 'home.ok')
+  const sub = !status ? t('home.checkingSub') : status.health === 'not_installed' ? t(installing ? 'home.installing' : 'home.installSub')
     : bad ? t('home.brokenSub')
     : t('home.okSub', { n, people: t(n === 1 ? 'people.connected.one' : 'people.connected.many'), max: status.maxSessions })
 
   return (
     <>
       <div className="flex items-center gap-3.5 rounded-2xl border bg-card p-[18px]" style={{ borderColor: bad ? 'var(--wa)' : 'var(--line)' }}>
-        {bad ? <IconAlertTriangle size={34} style={{ color: 'var(--wa)' }} /> : <IconCircleCheck size={34} style={{ color: 'var(--ok)' }} />}
+        {loading ? <IconLoader2 size={34} className="animate-spin" style={{ color: 'var(--purple)' }} />
+          : bad ? <IconAlertTriangle size={34} style={{ color: 'var(--wa)' }} /> : <IconCircleCheck size={34} style={{ color: 'var(--ok)' }} />}
         <div className="flex-1"><p className="m-0 text-base font-semibold">{title}</p><p className="muted m-0">{sub}</p></div>
-        {status.health === 'not_installed'
+        {loading ? <Button primary disabled>{t('home.check')}</Button>
+          : status.health === 'not_installed'
           ? <Button primary disabled={installing} onClick={() => setInstall(true)}>{t('home.install')}</Button>
           : <Button primary onClick={bad ? fix : check}>{t(bad ? 'home.fix' : 'home.check')}</Button>}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2.5">
         <Tile icon={IconUsers} title={t('tile.connected')} t="cyan" to="conectados"
-          sub={t('tile.connectedSub', { n, people: t(n === 1 ? 'people.one' : 'people.many') })} />
+          sub={loading ? dots : t('tile.connectedSub', { n, people: t(n === 1 ? 'people.one' : 'people.many') })} />
         <Tile icon={IconKey} title={t('tile.access')} t="yellow" to="accesos"
-          sub={status.accessCount === 1 ? t('tile.accessSub.one') : t('tile.accessSub.many', { n: status.accessCount })} />
+          sub={!status ? dots : status.accessCount === 1 ? t('tile.accessSub.one') : t('tile.accessSub.many', { n: status.accessCount })} />
         <Tile icon={IconMessage} title={t('tile.notify')} t="green" sub={t('tile.notifySub')} onClick={() => setMsg(true)} />
         <Tile icon={IconShieldCheck} title={t('tile.backups')} t="pink" to="ajustes"
-          sub={status.lastBackup ? t('tile.backupsSub', { when: when(status.lastBackup, lang).toLowerCase() }) : t('tile.backupsNone')} />
+          sub={!status ? dots : status.lastBackup ? t('tile.backupsSub', { when: when(status.lastBackup, lang).toLowerCase() }) : t('tile.backupsNone')} />
         <Tile icon={IconCalendarPause} title={t('tile.updates')} t="orange" to="ajustes"
-          sub={status.updatesPausedUntil ? t('tile.updatesPaused', { date: longDate(status.updatesPausedUntil, lang) }) : t('tile.updatesOn')} />
+          sub={!status ? dots : status.updatesPausedUntil ? t('tile.updatesPaused', { date: longDate(status.updatesPausedUntil, lang) }) : t('tile.updatesOn')} />
         <Tile icon={IconLifebuoy} title={t('tile.help')} t="purple" sub={t('tile.helpSub')}
           onClick={() => api.supportReport().then(p => p && notify(t('report.saved', { path: p }))).catch(fail)} />
       </div>

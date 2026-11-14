@@ -88,6 +88,8 @@ export async function mock(cmd: string, a: Record<string, any> = {}): Promise<un
     ] satisfies Profile[]
     case 'profile_from_machine': case 'activate_profile': return
     case 'update_ini': case 'generate_offsets': await wait(1200); return true
+    case 'update_check': await wait(900); return { current: '2.2.0', version: null }
+    case 'update_install': await wait(900); return false
     case 'repair_windows_update': case 'open_logs': case 'reinstall': case 'uninstall': await wait(800); return
   }
   throw new Error(`Comando desconocido: ${cmd}`)

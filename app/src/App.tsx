@@ -20,7 +20,7 @@ const TABS: [TabId, Key, typeof IconHome, Tone][] = [
   ['ajustes', 'tab.ajustes', IconSettings, 'green'],
 ]
 
-interface AppCtx { go: (t: TabId) => void; notify: (text: string) => void; fail: (e: unknown) => void; refreshKey: number; refresh: () => void; fixRequest: number }
+interface AppCtx { go: (t: TabId) => void; notify: (text: string) => void; fail: (e: unknown) => void; refreshKey: number; refresh: () => void; fixRequest: number; updateRequest: number }
 const Ctx = createContext<AppCtx>(null!)
 export const useApp = () => useContext(Ctx)
 
@@ -33,6 +33,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [fixRequest, setFixRequest] = useState(0)
+  const [updateRequest, setUpdateRequest] = useState(0)
 
   const [pref, setPrefState] = useState<LangPref>(() => (q?.get('lang') as LangPref) || loadPref())
   const lang: Lang = pref === 'auto' ? systemLang() : pref
@@ -41,7 +42,7 @@ export default function App() {
   useEffect(() => {
     if (!inTauri) return
     import('@tauri-apps/api/core').then(({ invoke }) => invoke('tray_labels', {
-      tooltip: 'MUD Control', open: translate(lang, 'tray.open'), fix: translate(lang, 'tray.fix'), quit: translate(lang, 'tray.quit'),
+      tooltip: 'MUD Control', open: translate(lang, 'tray.open'), fix: translate(lang, 'tray.fix'), update: translate(lang, 'tray.update'), quit: translate(lang, 'tray.quit'),
     })).catch(() => {})
   }, [lang])
   // Al abrir: el backend aplica los valores de primera vez (iniciar con Windows activado).
@@ -50,7 +51,9 @@ export default function App() {
     if (!inTauri) return
     let off: (() => void) | undefined
     import('@tauri-apps/api/event').then(({ listen }) => listen('tray-fix', () => { setTab('inicio'); setFixRequest(n => n + 1) })).then(f => (off = f))
-    return () => off?.()
+    let off2: (() => void) | undefined
+    import('@tauri-apps/api/event').then(({ listen }) => listen('tray-update', () => { setTab('ajustes'); setUpdateRequest(n => n + 1) })).then(f => (off2 = f))
+    return () => { off?.(); off2?.() }
   }, [])
   const i18n = useMemo<I18n>(() => ({
     lang, pref,
@@ -62,7 +65,7 @@ export default function App() {
   // Nunca mostrar excepciones crudas al usuario final: el detalle va al registro tecnico.
   const fail = useCallback((e: unknown) => { console.error(e); setToast(translate(lang, 'err.generic')) }, [lang])
   const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
-  const ctx = useMemo<AppCtx>(() => ({ go: setTab, notify: setToast, fail, refreshKey, refresh, fixRequest }), [fail, refreshKey, refresh, fixRequest])
+  const ctx = useMemo<AppCtx>(() => ({ go: setTab, notify: setToast, fail, refreshKey, refresh, fixRequest, updateRequest }), [fail, refreshKey, refresh, fixRequest, updateRequest])
   const t = i18n.t
 
   return (
