@@ -87,7 +87,7 @@ export function SettingsScreen() {
           <Switch label={t('set.startup')} tone="pink" checked={s?.startWithWindows ?? false} onChange={v => save({ startWithWindows: v })} />
         </Row>
         <Row title={t('set.language')}>
-          <select className="field" style={{ color: 'var(--cyan)' }} value={pref} aria-label={t('set.language')}
+          <select className="field" value={pref} aria-label={t('set.language')}
             onChange={e => setPref(e.target.value as LangPref)}>
             <option value="auto">{t('lang.auto')}</option>
             <option value="es">{t('lang.es')}</option>

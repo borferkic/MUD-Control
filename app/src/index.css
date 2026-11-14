@@ -72,4 +72,6 @@ input, select { user-select: text; }
     height: 32px; width: 128px; box-sizing: border-box; padding: 0 10px; border-radius: 8px;
     background: transparent; color: var(--fg); border: 0.5px solid var(--line); font-size: 12px;
   }
+  /* Lista desplegable: texto claro sobre fondo oscuro, o al reves en modo claro. */
+  select.field option { background: var(--card); color: var(--fg); }
 }
