@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+   Paleta Synthwave '84. Oscuro = tema original; claro = variante adaptada.
+   La app sigue siempre el tema de Windows (prefers-color-scheme), sin selector.
+   --------------------------------------------------------------------------- */
+:root {
+  --bg: #262335; --side: #1e1a2b; --card: #2a2139; --line: #3b2f5c;
+  --fg: #ffffff; --mu: #a59ccf; --ac: #ff7edb; --on: #262335; --logo: #36f9f6;
+  --ok: #72f1b8; --wa: #fede5d; --er: #fe4450;
+  --pink: #ff7edb; --cyan: #36f9f6; --green: #72f1b8; --yellow: #fede5d; --orange: #f97e72; --purple: #b893ce;
+  --glow: 0 0 10px color-mix(in srgb, var(--ac) 40%, transparent);
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f1fc; --side: #efe5f8; --card: #ffffff; --line: #e2d3f1;
+    --fg: #2a2139; --mu: #6f6290; --ac: #c2188a; --on: #ffffff; --logo: #0a8f9b;
+    --ok: #1b8a5a; --wa: #9a7300; --er: #d42f3f;
+    --pink: #c2188a; --cyan: #0a8f9b; --green: #1b8a5a; --yellow: #9a7300; --orange: #c8553f; --purple: #8c5bb5;
+    --glow: none;
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg); --color-side: var(--side); --color-card: var(--card); --color-line: var(--line);
+  --color-fg: var(--fg); --color-mu: var(--mu); --color-ac: var(--ac); --color-on: var(--on); --color-logo: var(--logo);
+  --color-ok: var(--ok); --color-wa: var(--wa); --color-er: var(--er);
+  --color-pink: var(--pink); --color-cyan: var(--cyan); --color-green: var(--green);
+  --color-yellow: var(--yellow); --color-orange: var(--orange); --color-purple: var(--purple);
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--font-sans); font-size: 13px; line-height: 1.45;
+  user-select: none; -webkit-font-smoothing: antialiased;
+}
+input, select { user-select: text; }
+:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+@layer components {
+  /* Boton estandar: 32px de alto, 128px de ancho minimo, color por --k */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; min-width: 128px; padding: 0 14px; border-radius: 8px;
+    font-size: 12px; white-space: nowrap; cursor: pointer;
+    color: var(--k, var(--fg));
+    border: 0.5px solid color-mix(in srgb, var(--k, var(--fg)) 45%, transparent);
+    background: color-mix(in srgb, var(--k, var(--fg)) 10%, transparent);
+    transition: background .15s, box-shadow .2s;
+  }
+  .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--k, var(--fg)) 18%, transparent); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn svg { width: 15px; height: 15px; }
+  .btn-lit { background: color-mix(in srgb, var(--k) 26%, transparent); border-color: var(--k); box-shadow: 0 0 12px color-mix(in srgb, var(--k) 60%, transparent); }
+  @media (prefers-color-scheme: light) { .btn-lit { box-shadow: 0 0 0 2px color-mix(in srgb, var(--k) 30%, transparent); } }
+  .btn-primary {
+    height: 36px; min-width: 140px; font-weight: 600; border: none;
+    background: var(--ac); color: var(--on); box-shadow: var(--glow);
+  }
+  .btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ac) 88%, var(--fg)); }
+
+  .card { border: 0.5px solid var(--line); border-radius: 12px; background: var(--card); padding: 4px 14px; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 0; }
+  .row + .row { border-top: 0.5px solid var(--line); }
+  .muted { color: var(--mu); font-size: 12px; }
+  .field {
+    height: 32px; width: 128px; box-sizing: border-box; padding: 0 10px; border-radius: 8px;
+    background: transparent; color: var(--fg); border: 0.5px solid var(--line); font-size: 12px;
+  }
+}

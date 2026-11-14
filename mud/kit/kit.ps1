@@ -2,22 +2,40 @@
 #  Kit RDP Wrapper - instalacion / reparacion / verificacion
 #  Lo invoca instalar.bat (ya elevado). No ejecutar suelto.
 # =============================================================================
-param([string]$Accion = '', [switch]$Auto)
+param([string]$Accion = '', [switch]$Auto, [string]$Perfil = '')
 
 $ErrorActionPreference = 'Stop'
 $Kit  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dir  = Join-Path $env:ProgramFiles 'RDP Wrapper'
 $Log  = Join-Path $env:SystemRoot 'Logs\kit-rdpwrapper.log'
 
-# ----------------------- CONFIGURACION (editable) ----------------------------
+# ----------------------- CONFIGURACION POR DEFECTO ---------------------------
+# Lo propio de cada cliente va en un perfil JSON (ver perfiles\ejemplo.json):
+#   kit.ps1 -Perfil ruta\perfil.json   o un archivo perfil.json junto a kit.ps1.
+# Solo se sobrescriben las claves presentes en el perfil.
 $Cfg = @{
+    Nombre              = 'Predeterminado'
     Puerto              = 3389
     MaxSesiones         = 20       # directiva MaxInstanceCount
-    NLA                 = 0        # 0 = como esta hoy este equipo. 1 = recomendado (mas seguro)
+    NLA                 = 1        # 1 = recomendado. 0 solo si hay clientes RDP antiguos
     Shadow              = 1        # 1 = control total con permiso del usuario
-    UsuariosRDP         = @()        # ej: @('Usuario1','Usuario2')   # se agregan a "Usuarios de escritorio remoto" si existen
+    UsuariosRDP         = @()      # se agregan a "Usuarios de escritorio remoto" si existen
     TareaAutoFix        = $true    # tarea al inicio que repara tras Windows Update
+    PerfilesFirewall    = @('Domain', 'Private')   # 'Public' solo si es imprescindible
 }
+if (-not $Perfil) { $Perfil = Join-Path $Kit 'perfil.json' }
+if (Test-Path $Perfil) {
+    try {
+        $p = Get-Content $Perfil -Raw -Encoding UTF8 | ConvertFrom-Json
+        foreach ($k in @($Cfg.Keys)) {
+            if ($p.PSObject.Properties.Name -contains $k) { $Cfg[$k] = $p.$k }
+        }
+        $PerfilCargado = $Perfil
+    } catch { Write-Host "Perfil no valido ($Perfil): $($_.Exception.Message). Se usan valores por defecto." -ForegroundColor Yellow }
+}
+$Cfg.UsuariosRDP      = @($Cfg.UsuariosRDP | Where-Object { $_ })
+$Cfg.PerfilesFirewall = @($Cfg.PerfilesFirewall | Where-Object { $_ -in 'Domain','Private','Public' })
+if (-not $Cfg.PerfilesFirewall) { $Cfg.PerfilesFirewall = @('Domain', 'Private') }
 # -----------------------------------------------------------------------------
 
 function Log([string]$m, [string]$c = 'Gray') {
@@ -52,6 +70,13 @@ function Run-Fix {
 # =============================================================================
 function Instalar {
     Log '=== INSTALACION COMPLETA ===' 'Cyan'
+    $zip = Join-Path $Kit 'payload.zip'
+    if (-not (Test-Path $zip)) {
+        Log "Falta $zip (binarios de RDP Wrapper). Genere el kit con el script de build o copie payload.zip junto a kit.ps1." 'Red'
+        return
+    }
+    if ($PerfilCargado) { Log "Perfil: $($Cfg.Nombre) ($PerfilCargado)" } else { Log 'Perfil: valores por defecto' }
+    if (-not $Cfg.NLA) { Log 'AVISO: NLA desactivada en el perfil. Cualquiera que llegue al puerto ve la pantalla de inicio de sesion.' 'Yellow' }
 
     # 1. Antivirus: rdpwrap.dll suele detectarse como "HackTool"
     if (Pregunta "Agregar exclusion de Microsoft Defender para '$Dir' (necesario: Defender borra rdpwrap.dll)") {
@@ -61,7 +86,6 @@ function Instalar {
 
     # 2. Copiar archivos
     New-Item -ItemType Directory -Path $Dir -Force | Out-Null
-    $zip = Join-Path $Kit 'payload.zip'
     $tmp = Join-Path $env:TEMP ('rdpkit-' + [guid]::NewGuid().ToString('N'))
     Expand-Archive -Path $zip -DestinationPath $tmp -Force
     $svcDll = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Services\TermService\Parameters').ServiceDll
@@ -93,24 +117,24 @@ function Instalar {
     $tcp = "$ts\WinStations\RDP-Tcp"
     $pol = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
     Set-Reg $ts  fDenyTSConnections    0
-    Set-Reg $ts  fSingleSessionPerUser 0
+    Set-Reg $ts  fSingleSessionPerUser 1   # siempre una sesion por usuario (no configurable)
     Set-Reg $tcp PortNumber            $Cfg.Puerto
     Set-Reg $tcp UserAuthentication    $Cfg.NLA
     Set-Reg $tcp SecurityLayer         ($(if ($Cfg.NLA) { 2 } else { 0 }))
     Set-Reg $pol fDenyTSConnections    0
-    Set-Reg $pol fSingleSessionPerUser 0
+    Set-Reg $pol fSingleSessionPerUser 1
     Set-Reg $pol MaxInstanceCount      $Cfg.MaxSesiones
     Set-Reg $pol fDisableAutoReconnect 0
     Set-Reg $pol Shadow                $Cfg.Shadow
-    Log "Registro/directivas: RDP habilitado, multisesion, max $($Cfg.MaxSesiones) sesiones, NLA=$($Cfg.NLA), puerto $($Cfg.Puerto)." 'Green'
+    Log "Registro/directivas: RDP habilitado, una sesion por usuario, max $($Cfg.MaxSesiones) sesiones, NLA=$($Cfg.NLA), puerto $($Cfg.Puerto)." 'Green'
 
-    # 4. Firewall (grupo "Escritorio remoto", independiente del idioma)
-    netsh advfirewall firewall set rule group="@FirewallAPI.dll,-28752" new enable=Yes | Out-Null
-    if (-not (Get-NetFirewallRule -DisplayName 'RDP Wrapper TCP' -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule -DisplayName 'RDP Wrapper TCP' -Direction Inbound -Protocol TCP -LocalPort $Cfg.Puerto -Action Allow -Profile Any | Out-Null
-        New-NetFirewallRule -DisplayName 'RDP Wrapper UDP' -Direction Inbound -Protocol UDP -LocalPort $Cfg.Puerto -Action Allow -Profile Any | Out-Null
-    }
-    Log "Firewall: puerto $($Cfg.Puerto) TCP/UDP abierto." 'Green'
+    # 4. Firewall: reglas propias, solo en los perfiles de red elegidos. Se recrean
+    #    siempre para reflejar cambios de puerto o perfil.
+    $fwProf = $Cfg.PerfilesFirewall -join ','
+    Get-NetFirewallRule -DisplayName 'RDP Wrapper TCP', 'RDP Wrapper UDP' -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+    New-NetFirewallRule -DisplayName 'RDP Wrapper TCP' -Direction Inbound -Protocol TCP -LocalPort $Cfg.Puerto -Action Allow -Profile $fwProf | Out-Null
+    New-NetFirewallRule -DisplayName 'RDP Wrapper UDP' -Direction Inbound -Protocol UDP -LocalPort $Cfg.Puerto -Action Allow -Profile $fwProf | Out-Null
+    Log "Firewall: puerto $($Cfg.Puerto) TCP/UDP abierto en perfiles $fwProf." 'Green'
 
     # 5. Usuarios de escritorio remoto (SID S-1-5-32-555)
     foreach ($u in $Cfg.UsuariosRDP) {
@@ -182,7 +206,7 @@ try {
         Write-Host '  3) Reparar Windows Update'
         Write-Host '  4) Verificar estado'
         Write-Host '  5) Desinstalar RDP Wrapper'
-        Write-Host '  6) Bloquear Windows Update hasta 30/12/2026 (fija 25H2)'
+        Write-Host '  6) Pausar Windows Update (elige fecha, fija la version actual)'
         Write-Host '  7) Desbloquear Windows Update'
         Write-Host '  0) Salir'
         $Accion = Read-Host 'Opcion'
@@ -193,7 +217,11 @@ try {
         '3' { Start-Process 'cmd.exe' -ArgumentList "/c `"$Kit\reparar-windowsupdate.bat`"" -Wait }
         '4' { Verificar }
         '5' { Desinstalar }
-        '6' { Start-Process 'cmd.exe' -ArgumentList "/c `"$Kit\bloquear-actualizaciones.bat`"" -Wait }
+        '6' {
+            $f = if ($Auto) { '' } else { Read-Host 'Pausar hasta (AAAA-MM-DD, Enter = 35 dias)' }
+            $a = if ($f) { "/hasta:$f" } else { '' }
+            Start-Process 'cmd.exe' -ArgumentList "/c `"$Kit\bloquear-actualizaciones.bat`" $a" -Wait
+        }
         '7' { Start-Process 'cmd.exe' -ArgumentList "/c `"$Kit\bloquear-actualizaciones.bat`" /desbloquear" -Wait }
         default { return }
     }

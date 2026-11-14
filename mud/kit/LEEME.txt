@@ -55,13 +55,19 @@ QUE ES ESTO
   y volver a ejecutar  fix-rdpwrap.bat /finder
 
 ---------------------------------------------------------------------
- CONFIGURACION QUE APLICA LA INSTALACION (editable en kit.ps1, $Cfg)
+ CONFIGURACION QUE APLICA LA INSTALACION (perfil JSON)
 ---------------------------------------------------------------------
-  - Escritorio remoto habilitado, puerto 3389, firewall abierto TCP/UDP
-  - Multisesion: fSingleSessionPerUser=0, MaxInstanceCount=20
+  Lo propio de cada cliente va en un perfil (ver perfiles\ejemplo.json).
+  Se usa perfil.json junto a kit.ps1, o:  kit.ps1 -Perfil ruta\perfil.json
+  Sin perfil se aplican estos valores por defecto:
+  - Escritorio remoto habilitado, puerto 3389, firewall TCP/UDP abierto
+    solo en redes de dominio y privadas (PerfilesFirewall)
+  - Varias personas a la vez (MaxInstanceCount=20), pero cada cuenta solo
+    una sesion: fSingleSessionPerUser=1, fijo. Si alguien entra con una cuenta
+    que ya esta conectada, recupera esa sesion en vez de abrir otra.
   - Reconexion automatica permitida, Shadow=1
-  - NLA = 0 (igual que este equipo hoy). RECOMENDADO cambiar a 1.
-  - Usuarios de $Cfg.UsuariosRDP en "Usuarios de escritorio remoto"
+  - NLA = 1 (recomendado). Poner 0 solo si hay clientes RDP antiguos.
+  - Usuarios de UsuariosRDP en "Usuarios de escritorio remoto"
     (los administradores ya pueden conectarse)
   - Exclusion de Defender para C:\Program Files\RDP Wrapper (pregunta antes)
   - Tarea programada RDPWrap-AutoFix (al iniciar Windows)
@@ -80,9 +86,10 @@ QUE ES ESTO
 ---------------------------------------------------------------------
  BLOQUEAR ACTUALIZACIONES (opciones 6 y 7)
 ---------------------------------------------------------------------
-  bloquear-actualizaciones.bat  pausa Windows Update hasta el 30/12/2026,
-  fija la version en 25H2 (no vuelve a intentar 26H2), solo notifica y no
-  reinicia con usuarios conectados. Defender sigue actualizando firmas.
+  bloquear-actualizaciones.bat  pausa Windows Update 35 dias (o hasta la
+  fecha de /hasta:AAAA-MM-DD), fija la version instalada de Windows (o la de
+  /version:25H2), solo notifica y no reinicia con usuarios conectados.
+  Defender sigue actualizando firmas.
   Revertir: opcion 7  o  bloquear-actualizaciones.bat /desbloquear
   OJO: sin parches de seguridad mensuales mientras dure la pausa.
 

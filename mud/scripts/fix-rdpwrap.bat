@@ -16,7 +16,8 @@
 ::   4. Si ninguna la tiene: sale con codigo 7 (la tarea reintenta en cada arranque).
 ::      Con /finder genera los offsets con RDPWrapOffsetFinder (llccd) usando los
 ::      simbolos publicos de Microsoft y los agrega al ini (con backup).
-::   5. Fuerza multisesion en el registro, reinicia TermService y verifica.
+::   5. Asegura RDP habilitado y UNA sesion por usuario (varias personas distintas a
+::      la vez, pero cada cuenta solo una vez), reinicia TermService y verifica.
 ::  Log: C:\Program Files\RDP Wrapper\fix-rdpwrap.log
 ::  NOTA: reiniciar TermService desconecta las sesiones RDP abiertas (se reconectan).
 :: ============================================================================
@@ -67,6 +68,22 @@ function Log([string]$m, [string]$c = 'Gray') {
     try { Add-Content -Path $Log -Value $l -Encoding UTF8 } catch {}
 }
 function Has-Section([string]$text, [string]$v) { $text -match ('(?m)^\[' + [regex]::Escape($v) + '\]') }
+function Section-Names([string]$text) {
+    [regex]::Matches($text, '(?m)^\[([^\]\r\n]+)\]') | ForEach-Object { $_.Groups[1].Value }
+}
+function Section-Block([string]$text, [string]$name) {
+    [regex]::Match($text, '(?ms)^\[' + [regex]::Escape($name) + '\][^\r\n]*\r?\n.*?(?=^\[|\z)').Value
+}
+# Usa el INI publico como base y le agrega las secciones de version que solo
+# existen en el INI local (p. ej. generadas con /finder), para no perderlas.
+function Merge-Ini([string]$public, [string]$local) {
+    $pub = @(Section-Names $public)
+    $extra = Section-Names $local | Where-Object { $_ -match '^\d+\.\d+\.\d+\.\d+(-SLInit)?$' -and $pub -notcontains $_ }
+    if (-not $extra) { return @{ Text = $public; Kept = @() } }
+    $add = ($extra | ForEach-Object { (Section-Block $local $_).TrimEnd() }) -join "`r`n`r`n"
+    $text = $public.TrimEnd() + "`r`n`r`n; --- Secciones locales conservadas por fix-rdpwrap.bat ---`r`n" + $add + "`r`n"
+    return @{ Text = $text; Kept = @($extra) }
+}
 function Backup-Ini {
     $b = "$Ini.bak-" + (Get-Date).ToString('yyyyMMdd-HHmmss')
     Copy-Item $Ini $b -Force
@@ -113,8 +130,10 @@ try {
                     $t = (Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 60).Content
                     if ((Has-Section $t $ver) -and ($t -match '(?m)^\[PatchCodes\]')) {
                         Backup-Ini
-                        [IO.File]::WriteAllText($Ini, $t, $Utf8)
+                        $m = Merge-Ini $t $iniText
+                        [IO.File]::WriteAllText($Ini, $m.Text, $Utf8)
                         Log "INI actualizado desde $u" 'Green'
+                        if ($m.Kept.Count) { Log ("Secciones locales conservadas: " + ($m.Kept -join ', ')) }
                         $changed = $true; break
                     } else { Log "Sin soporte para $ver en $u" 'DarkYellow' }
                 } catch { Log "No se pudo leer $u : $($_.Exception.Message)" 'DarkYellow' }
@@ -161,7 +180,14 @@ try {
                 Log "Ejecutando $(Split-Path $c -Leaf) ..."
                 Push-Location (Split-Path $c)
                 try { $out = (& $c $Termsrv 2>&1 | Out-String) } finally { Pop-Location }
-                if ((Has-Section $out $ver) -and ($out -notmatch '(?i)not found|error|fail')) { $gen = $out.Trim(); break }
+                # Validar por contenido, no por palabras sueltas: debe traer la seccion
+                # de la version con al menos un parche x64. Se descarta el texto previo.
+                $start = [regex]::Match($out, '(?m)^\[' + [regex]::Escape($ver) + '\]')
+                if ($start.Success) {
+                    $cand = $out.Substring($start.Index).Trim()
+                    $main = Section-Block $cand $ver
+                    if ($main -match '(?m)^(SingleUserPatch|DefPolicyPatch|LocalOnlyPatch)\.x64=1') { $gen = $cand; break }
+                }
                 Log "Salida no valida de $(Split-Path $c -Leaf):`n$out" 'DarkYellow'
             }
             if (-not $gen) { Log "No se pudieron generar offsets para $ver." 'Red'; exit 5 }
@@ -184,11 +210,17 @@ try {
         }
     }
 
-    # --- 4. Registro: multisesion -------------------------------------------------
-    $ts = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
-    Set-ItemProperty $ts -Name fDenyTSConnections -Value 0 -Type DWord
-    Set-ItemProperty $ts -Name fSingleSessionPerUser -Value 0 -Type DWord
-    Log 'Registro: fDenyTSConnections=0, fSingleSessionPerUser=0'
+    # --- 4. Registro: RDP habilitado, una sesion por usuario ----------------------
+    # Siempre fSingleSessionPerUser=1 (no configurable). Se escribe tambien la
+    # directiva porque tiene prioridad sobre el registro (versiones antiguas del kit
+    # la dejaban en 0).
+    $ts  = 'HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server'
+    $pol = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services'
+    if (-not (Test-Path $pol)) { New-Item -Path $pol -Force | Out-Null }
+    Set-ItemProperty $ts  -Name fDenyTSConnections    -Value 0 -Type DWord
+    Set-ItemProperty $ts  -Name fSingleSessionPerUser -Value 1 -Type DWord
+    Set-ItemProperty $pol -Name fSingleSessionPerUser -Value 1 -Type DWord
+    Log 'Registro: fDenyTSConnections=0, fSingleSessionPerUser=1 (registro y directiva)'
 
     # --- 5. Reiniciar TermService (solo si cambio el ini o es ejecucion manual) ----
     if ($changed -or -not $Silent) {
@@ -205,10 +237,10 @@ try {
     $ok = $true
     $svc = Get-Service TermService
     if ($svc.Status -ne 'Running') { Log "TermService NO esta corriendo ($($svc.Status))" 'Red'; $ok = $false } else { Log 'TermService: Running' 'Green' }
-    if (Get-NetTCPConnection -LocalPort 3389 -State Listen -ErrorAction SilentlyContinue) { Log 'Puerto 3389: escuchando' 'Green' } else { Log 'Puerto 3389: NO escucha' 'Red'; $ok = $false }
+    $port = (Get-ItemProperty "$ts\WinStations\RDP-Tcp" -ErrorAction SilentlyContinue).PortNumber
+    if (-not $port) { $port = 3389 }
+    if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) { Log "Puerto ${port}: escuchando" 'Green' } else { Log "Puerto ${port}: NO escucha" 'Red'; $ok = $false }
     if (Has-Section ([IO.File]::ReadAllText($Ini)) $ver) { Log "rdpwrap.ini: seccion [$ver] presente" 'Green' } else { Log "rdpwrap.ini: falta [$ver]" 'Red'; $ok = $false }
-    $pol = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services' -ErrorAction SilentlyContinue
-    if ($pol -and $pol.fSingleSessionPerUser -eq 1) { Log 'AVISO: una directiva de grupo fuerza una sesion por usuario (fSingleSessionPerUser=1).' 'Yellow' }
 
     if ($ok) { Log '=== RDP Wrapper OK: multisesion habilitada ===' 'Green'; exit 0 }
     else     { Log '=== Terminado con problemas, revise el log ===' 'Red'; exit 1 }

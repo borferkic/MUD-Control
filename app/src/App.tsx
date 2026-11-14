@@ -1,0 +1,68 @@
+import * as Tabs from '@radix-ui/react-tabs'
+import { IconHistory, IconHome, IconKey, IconSettings, IconUsers } from '@tabler/icons-react'
+import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { TitleBar } from './components/TitleBar'
+import { inTauri } from './lib/backend'
+import { Button, Toast, tone, type Tone } from './components/ui'
+import { Activity } from './screens/Activity'
+import { Home } from './screens/Home'
+import { Connected } from './screens/Connected'
+import { AccessScreen } from './screens/Access'
+import { SettingsScreen } from './screens/Settings'
+
+export type TabId = 'inicio' | 'conectados' | 'accesos' | 'ajustes'
+const TABS: [TabId, string, typeof IconHome, Tone][] = [
+  ['inicio', 'Inicio', IconHome, 'pink'],
+  ['conectados', 'Conectados', IconUsers, 'cyan'],
+  ['accesos', 'Accesos', IconKey, 'yellow'],
+  ['ajustes', 'Ajustes', IconSettings, 'green'],
+]
+
+interface AppCtx { go: (t: TabId) => void; notify: (text: string) => void; fail: (e: unknown) => void; refreshKey: number; refresh: () => void }
+const Ctx = createContext<AppCtx>(null!)
+export const useApp = () => useContext(Ctx)
+
+export default function App() {
+  // En el navegador (solo para disenar y sacar capturas) ?tab=ajustes&actividad abre esa vista.
+  const q = inTauri ? null : new URLSearchParams(location.search)
+  const [tab, setTab] = useState<TabId>((q?.get('tab') as TabId) || 'inicio')
+  const [log, setLog] = useState(q?.has('actividad') ?? false)
+  const [toast, setToast] = useState<string | null>(null)
+  const [refreshKey, setRefreshKey] = useState(0)
+  const clear = useCallback(() => setToast(null), [])
+  // Nunca mostrar excepciones crudas al usuario final: el detalle va al registro tecnico.
+  const fail = useCallback((e: unknown) => { console.error(e); setToast('No se pudo completar. El detalle quedó en el registro técnico.') }, [])
+  const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
+  const ctx = useMemo<AppCtx>(() => ({ go: setTab, notify: setToast, fail, refreshKey, refresh }), [fail, refreshKey, refresh])
+
+  return (
+    <Ctx.Provider value={ctx}>
+      <div className="flex h-full flex-col overflow-hidden">
+        <TitleBar />
+        <Tabs.Root value={tab} onValueChange={v => setTab(v as TabId)} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex items-center gap-2.5 px-4 pt-3">
+            <Tabs.List aria-label="Secciones" className="inline-flex gap-0.5 rounded-xl border border-line bg-side p-[3px]">
+              {TABS.map(([id, label, I, t]) => (
+                <Tabs.Trigger key={id} value={id} style={tone(t)}
+                  className="flex h-[30px] cursor-pointer items-center gap-1.5 rounded-[9px] px-3.5 text-[13px] text-mu data-[state=active]:bg-[color-mix(in_srgb,var(--k)_16%,var(--card))] data-[state=active]:text-fg data-[state=active]:shadow-[0_0_0_0.5px_color-mix(in_srgb,var(--k)_50%,transparent)]">
+                  <I size={15} stroke={1.8} style={{ color: 'var(--k)' }} />{label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+            <Button tone="purple" icon={IconHistory} lit={log} aria-pressed={log} onClick={() => setLog(v => !v)} className="ml-auto">
+              Actividad
+            </Button>
+          </div>
+          {log && <div className="px-4 pt-3"><Activity /></div>}
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <Tabs.Content value="inicio"><Home /></Tabs.Content>
+            <Tabs.Content value="conectados"><Connected /></Tabs.Content>
+            <Tabs.Content value="accesos"><AccessScreen /></Tabs.Content>
+            <Tabs.Content value="ajustes"><SettingsScreen /></Tabs.Content>
+          </div>
+        </Tabs.Root>
+      </div>
+      <Toast text={toast} onDone={clear} />
+    </Ctx.Provider>
+  )
+}

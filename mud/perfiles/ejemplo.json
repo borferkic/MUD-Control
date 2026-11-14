@@ -1,0 +1,10 @@
+{
+  "Nombre": "Ejemplo",
+  "Puerto": 3389,
+  "MaxSesiones": 20,
+  "NLA": 1,
+  "Shadow": 1,
+  "UsuariosRDP": ["Usuario1", "Usuario2"],
+  "TareaAutoFix": true,
+  "PerfilesFirewall": ["Domain", "Private"]
+}
