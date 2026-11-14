@@ -54,7 +54,12 @@ ampliarlo, y añade lo que le falta para el día a día:
 |---|---|
 | ![Ajustes](docs/screens/ajustes.png) | ![Especialistas](docs/screens/especialistas.png) |
 
-La app sigue el tema claro u oscuro de Windows, con la paleta Synthwave '84.
+| Acerca de | English |
+|---|---|
+| ![Acerca de](docs/screens/acerca.png) | ![English](docs/screens/inicio-en.png) |
+
+La app sigue el tema claro u oscuro de Windows, con la paleta Synthwave '84, y está en
+**español e inglés**: usa el idioma de Windows y se puede cambiar en **Ajustes → Idioma**.
 
 ## Instalación
 

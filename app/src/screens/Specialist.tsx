@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useApp } from '../App'
 import { Button, Confirm, Prompt, Row, Switch, tone, type Tone } from '../components/ui'
 import { api } from '../lib/backend'
+import { useT } from '../lib/i18n'
 import type { SpecialistSettings } from '../lib/types'
 import { useLoad } from '../lib/useLoad'
 
@@ -24,6 +25,7 @@ type Danger = 'reinstall' | 'uninstall' | 'offsets' | null
 
 export function Specialist({ onHide }: { onHide: () => void }) {
   const { notify, fail, refresh } = useApp()
+  const { t } = useT()
   const [status, reloadStatus] = useLoad(api.status)
   const [loaded] = useLoad(api.specialist)
   const [profiles, reloadProfiles] = useLoad(api.profiles)
@@ -39,26 +41,26 @@ export function Specialist({ onHide }: { onHide: () => void }) {
     setBusy(key)
     fn().then(() => { notify(ok); reloadStatus(); refresh() }).catch(fail).finally(() => setBusy(null))
   }
-  const t = status?.technical
+  const tech = status?.technical
   const active = profiles?.find(p => p.active)
 
   return (
     <>
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 font-semibold"><IconTool size={16} style={{ color: 'var(--purple)' }} />Opciones para especialistas</span>
-        <Button icon={IconEyeOff} onClick={onHide}>Ocultar</Button>
+        <span className="flex items-center gap-1.5 font-semibold"><IconTool size={16} style={{ color: 'var(--purple)' }} />{t('spec.title')}</span>
+        <Button icon={IconEyeOff} onClick={onHide}>{t('hide')}</Button>
       </div>
-      <p className="muted mt-1">Cada cambio guarda antes una copia de seguridad y queda en la actividad.</p>
+      <p className="muted mt-1">{t('spec.sub')}</p>
 
-      <Group n={1} title="Estado del sistema" t="cyan">
+      <Group n={1} title={t('spec.g1')} t="cyan">
         <div className="grid grid-cols-3 gap-1.5">
           {[
-            ['termsrv.dll', t?.termsrvVersion],
-            ['Datos (INI)', t ? (t.iniSupported ? 'Compatible' : 'Sin soporte') : undefined],
-            ['Windows', t?.windowsVersion],
-            ['Servicio', t ? (t.serviceRunning ? 'En marcha' : 'Detenido') : undefined],
-            ['RDP Wrapper', t ? (t.wrapperLoaded ? 'Cargado' : 'No cargado') : undefined],
-            ['Perfil activo', t?.profile],
+            ['termsrv.dll', tech?.termsrvVersion],
+            [t('spec.ini'), tech ? t(tech.iniSupported ? 'spec.iniOk' : 'spec.iniNo') : undefined],
+            ['Windows', tech?.windowsVersion],
+            [t('spec.service'), tech ? t(tech.serviceRunning ? 'spec.running' : 'spec.stopped') : undefined],
+            ['RDP Wrapper', tech ? t(tech.wrapperLoaded ? 'spec.loaded' : 'spec.notLoaded') : undefined],
+            [t('spec.profile'), tech?.profile],
           ].map(([k, v]) => (
             <div key={k} className="rounded-lg bg-side px-2.5 py-1.5">
               <span className="muted">{k}</span>
@@ -68,102 +70,101 @@ export function Specialist({ onHide }: { onHide: () => void }) {
         </div>
       </Group>
 
-      <Group n={2} title="Conexión y seguridad" t="yellow">
+      <Group n={2} title={t('spec.g2')} t="yellow">
         <div className="card">
-          <Row title="Puerto RDP">
+          <Row title={t('spec.port')}>
             <input className="field" type="number" min={1} max={65535} value={cfg?.port ?? ''} onChange={e => set({ port: Number(e.target.value) })} />
           </Row>
-          <Row title="Máximo de sesiones a la vez">
+          <Row title={t('spec.max')}>
             <input className="field" type="number" min={1} max={999} value={cfg?.maxSessions ?? ''} onChange={e => set({ maxSessions: Number(e.target.value) })} />
           </Row>
-          <Row title="Autenticación NLA" hint="Recomendado: activada">
-            <Switch label="NLA" tone="yellow" checked={cfg?.nla ?? false} onChange={v => set({ nla: v })} />
+          <Row title={t('spec.nla')} hint={t('spec.nlaHint')}>
+            <Switch label={t('spec.nla')} tone="yellow" checked={cfg?.nla ?? false} onChange={v => set({ nla: v })} />
           </Row>
-          <Row title="Firewall en redes de dominio y privadas">
-            <Switch label="Firewall privadas" tone="yellow" checked={cfg?.firewallPrivate ?? false} onChange={v => set({ firewallPrivate: v })} />
+          <Row title={t('spec.fwPrivate')}>
+            <Switch label={t('spec.fwPrivate')} tone="yellow" checked={cfg?.firewallPrivate ?? false} onChange={v => set({ firewallPrivate: v })} />
           </Row>
-          <Row title="Firewall en redes públicas" hint="No recomendado">
-            <Switch label="Firewall públicas" tone="yellow" checked={cfg?.firewallPublic ?? false} onChange={v => set({ firewallPublic: v })} />
+          <Row title={t('spec.fwPublic')} hint={t('spec.fwPublicHint')}>
+            <Switch label={t('spec.fwPublic')} tone="yellow" checked={cfg?.firewallPublic ?? false} onChange={v => set({ firewallPublic: v })} />
           </Row>
-          <Row title="Ver sesiones con permiso del usuario">
-            <Switch label="Ver sesiones" tone="yellow" checked={cfg?.shadow ?? false} onChange={v => set({ shadow: v })} />
+          <Row title={t('spec.shadow')}>
+            <Switch label={t('spec.shadow')} tone="yellow" checked={cfg?.shadow ?? false} onChange={v => set({ shadow: v })} />
           </Row>
         </div>
         {dirty && (
           <div className="mt-2 flex justify-end gap-2">
-            <Button onClick={() => { setCfg(loaded); setDirty(false) }}>Descartar</Button>
-            <Button tone="yellow" lit onClick={() => cfg && run('cfg', () => api.saveSpecialist(cfg).then(() => setDirty(false)), 'Cambios aplicados')}>
-              Aplicar cambios
+            <Button onClick={() => { setCfg(loaded); setDirty(false) }}>{t('spec.discard')}</Button>
+            <Button tone="yellow" lit onClick={() => cfg && run('cfg', () => api.saveSpecialist(cfg).then(() => setDirty(false)), t('spec.applied'))}>
+              {t('spec.apply')}
             </Button>
           </div>
         )}
       </Group>
 
-      <Group n={3} title="Perfiles de cliente" t="pink">
+      <Group n={3} title={t('spec.g3')} t="pink">
         <div className="card">
           {profiles?.map(p => (
-            <Row key={p.name} title={p.name} hint={`${p.active ? 'Activo · ' : ''}${p.port} · ${p.maxSessions} sesiones · ${p.accessCount} accesos`}>
+            <Row key={p.name} title={p.name}
+              hint={t('spec.profileHint', { active: p.active ? t('spec.activePrefix') : '', port: p.port, max: p.maxSessions, n: p.accessCount })}>
               {p.active
-                ? <Button tone="pink" icon={IconEdit} onClick={() => notify('Edita el perfil desde "Conexión y seguridad" y "Accesos"')}>Editar</Button>
-                : <Button tone="pink" icon={IconSwitchHorizontal} onClick={() => run('p' + p.name, () => api.activateProfile(p.name).then(reloadProfiles), `Perfil ${p.name} aplicado`)}>Aplicar</Button>}
+                ? <Button tone="pink" icon={IconEdit} onClick={() => notify(t('spec.editHint'))}>{t('spec.edit')}</Button>
+                : <Button tone="pink" icon={IconSwitchHorizontal} onClick={() => run('p' + p.name, () => api.activateProfile(p.name).then(reloadProfiles), t('spec.profileApplied', { name: p.name }))}>{t('spec.applyProfile')}</Button>}
             </Row>
           ))}
-          <Row title="Crear perfil desde este equipo" hint={active ? `Copia la configuración actual (${active.name})` : undefined}>
-            <Button tone="pink" icon={IconPlus} onClick={() => setNewProfile(true)}>Nuevo</Button>
+          <Row title={t('spec.newProfile')} hint={active ? t('spec.newProfileHint', { name: active.name }) : undefined}>
+            <Button tone="pink" icon={IconPlus} onClick={() => setNewProfile(true)}>{t('spec.new')}</Button>
           </Row>
         </div>
       </Group>
 
-      <Group n={4} title="Reparación avanzada" t="green">
+      <Group n={4} title={t('spec.g4')} t="green">
         <div className="card">
-          <Row title="Actualizar datos de Windows" hint="Descarga el INI y conserva las secciones locales">
-            <Button tone="green" icon={IconRefresh} disabled={busy === 'ini'} onClick={() => run('ini', api.updateIni, 'Datos actualizados')}>{busy === 'ini' ? 'Actualizando…' : 'Actualizar'}</Button>
+          <Row title={t('spec.updateIni')} hint={t('spec.updateIniHint')}>
+            <Button tone="green" icon={IconRefresh} disabled={busy === 'ini'} onClick={() => run('ini', api.updateIni, t('spec.updated'))}>{t(busy === 'ini' ? 'spec.updating' : 'spec.update')}</Button>
           </Row>
-          <Row title="Generar offsets en este equipo" hint="Cuando aún no hay datos públicos. Defender puede bloquearlo">
-            <Button tone="green" icon={IconCpu} disabled={busy === 'off'} onClick={() => setDanger('offsets')}>{busy === 'off' ? 'Generando…' : 'Generar'}</Button>
+          <Row title={t('spec.offsets')} hint={t('spec.offsetsHint')}>
+            <Button tone="green" icon={IconCpu} disabled={busy === 'off'} onClick={() => setDanger('offsets')}>{t(busy === 'off' ? 'spec.generating' : 'spec.generate')}</Button>
           </Row>
-          <Row title="Reparar Windows Update" hint="DISM, SFC y limpieza de caché. Puede tardar media hora">
-            <Button tone="green" icon={IconTool} disabled={busy === 'wu'} onClick={() => run('wu', api.repairWindowsUpdate, 'Reparación de Windows Update terminada')}>{busy === 'wu' ? 'Reparando…' : 'Reparar'}</Button>
+          <Row title={t('spec.wu')} hint={t('spec.wuHint')}>
+            <Button tone="green" icon={IconTool} disabled={busy === 'wu'} onClick={() => run('wu', api.repairWindowsUpdate, t('spec.wuDone'))}>{t(busy === 'wu' ? 'spec.repairing' : 'spec.repair')}</Button>
           </Row>
         </div>
       </Group>
 
-      <Group n={5} title="Diagnóstico" t="purple">
+      <Group n={5} title={t('spec.g5')} t="purple">
         <div className="card">
-          <Row title="Registro técnico" hint="Logs completos de los scripts">
-            <Button tone="purple" icon={IconFileText} onClick={() => api.openLogs().catch(fail)}>Abrir</Button>
+          <Row title={t('spec.logs')} hint={t('spec.logsHint')}>
+            <Button tone="purple" icon={IconFileText} onClick={() => api.openLogs().catch(fail)}>{t('spec.open')}</Button>
           </Row>
-          <Row title="Informe de diagnóstico" hint="Para enviar a otro especialista">
-            <Button tone="purple" icon={IconDownload} onClick={() => api.supportReport().then(p => p && notify(`Informe guardado en ${p}`)).catch(fail)}>Exportar</Button>
+          <Row title={t('spec.report')} hint={t('spec.reportHint')}>
+            <Button tone="purple" icon={IconDownload} onClick={() => api.supportReport().then(p => p && notify(t('report.saved', { path: p }))).catch(fail)}>{t('spec.export')}</Button>
           </Row>
         </div>
       </Group>
 
-      <Group n={6} title="Instalación" t="orange">
+      <Group n={6} title={t('spec.g6')} t="orange">
         <div className="rounded-xl border px-3.5 py-1" style={{ borderColor: 'color-mix(in srgb, var(--er) 45%, transparent)', background: 'color-mix(in srgb, var(--er) 6%, transparent)' }}>
-          <Row title="Reinstalar RDP Wrapper" hint="Deja todo como recién instalado">
-            <Button tone="orange" icon={IconPackage} disabled={busy === 're'} onClick={() => setDanger('reinstall')}>Reinstalar</Button>
+          <Row title={t('spec.reinstall')} hint={t('spec.reinstallHint')}>
+            <Button tone="orange" icon={IconPackage} disabled={busy === 're'} onClick={() => setDanger('reinstall')}>{t('spec.reinstallBtn')}</Button>
           </Row>
-          <Row title="Desinstalar RDP Wrapper" hint="El equipo vuelve a permitir una sola persona">
-            <Button tone="er" icon={IconTrash} disabled={busy === 'un'} onClick={() => setDanger('uninstall')}>Desinstalar</Button>
+          <Row title={t('spec.uninstall')} hint={t('spec.uninstallHint')}>
+            <Button tone="er" icon={IconTrash} disabled={busy === 'un'} onClick={() => setDanger('uninstall')}>{t('spec.uninstallBtn')}</Button>
           </Row>
         </div>
       </Group>
 
       <Confirm open={danger !== null} onOpenChange={o => !o && setDanger(null)} danger={danger === 'uninstall'}
-        title={danger === 'uninstall' ? '¿Desinstalar RDP Wrapper?' : danger === 'reinstall' ? '¿Reinstalar RDP Wrapper?' : '¿Generar offsets en este equipo?'}
-        text={danger === 'uninstall' ? 'Solo podrá entrar una persona a la vez. Las personas conectadas se desconectarán.'
-          : danger === 'reinstall' ? 'Las personas conectadas se desconectarán unos segundos. Se guarda una copia antes.'
-          : 'Descarga RDPWrapOffsetFinder (llccd). Microsoft Defender suele marcarlo como amenaza; úsalo solo si confías en la herramienta.'}
-        action={danger === 'uninstall' ? 'Desinstalar' : danger === 'reinstall' ? 'Reinstalar' : 'Generar'}
+        title={t(danger === 'uninstall' ? 'spec.confirmUninstall' : danger === 'reinstall' ? 'spec.confirmReinstall' : 'spec.confirmOffsets')}
+        text={t(danger === 'uninstall' ? 'spec.confirmUninstallText' : danger === 'reinstall' ? 'spec.confirmReinstallText' : 'spec.confirmOffsetsText')}
+        action={t(danger === 'uninstall' ? 'spec.uninstallBtn' : danger === 'reinstall' ? 'spec.reinstallBtn' : 'spec.generate')}
         onConfirm={() => {
-          if (danger === 'uninstall') run('un', api.uninstall, 'RDP Wrapper desinstalado')
-          else if (danger === 'reinstall') run('re', api.reinstall, 'RDP Wrapper reinstalado')
-          else run('off', api.generateOffsets, 'Offsets generados')
+          if (danger === 'uninstall') run('un', api.uninstall, t('spec.uninstalled'))
+          else if (danger === 'reinstall') run('re', api.reinstall, t('spec.reinstalled'))
+          else run('off', api.generateOffsets, t('spec.generated'))
         }} />
-      <Prompt open={newProfile} onOpenChange={setNewProfile} title="Nuevo perfil" label="Nombre del cliente o del equipo"
-        placeholder="Oficina contable" action="Crear"
-        onSubmit={n => run('np', () => api.profileFromMachine(n).then(reloadProfiles), `Perfil ${n} creado`)} />
+      <Prompt open={newProfile} onOpenChange={setNewProfile} title={t('spec.newTitle')} label={t('spec.newLabel')}
+        placeholder={t('spec.newPlaceholder')} action={t('spec.create')}
+        onSubmit={n => run('np', () => api.profileFromMachine(n).then(reloadProfiles), t('spec.created', { name: n }))} />
     </>
   )
 }

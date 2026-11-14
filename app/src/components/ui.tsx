@@ -3,6 +3,7 @@ import * as RSwitch from '@radix-ui/react-switch'
 import * as RDialog from '@radix-ui/react-dialog'
 import { clsx } from 'clsx'
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
+import { useT } from '../lib/i18n'
 import type { Icon } from '@tabler/icons-react'
 
 export type Tone = 'pink' | 'cyan' | 'green' | 'yellow' | 'orange' | 'purple' | 'er'
@@ -56,6 +57,7 @@ export function Heading({ title, sub }: { title: string; sub?: string }) {
 /** Dialogo de confirmacion para acciones que molestan a alguien o no se deshacen. */
 export function Confirm({ open, onOpenChange, title, text, action, danger, onConfirm }:
   { open: boolean; onOpenChange: (v: boolean) => void; title: string; text: ReactNode; action: string; danger?: boolean; onConfirm: () => void }) {
+  const { t } = useT()
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
@@ -64,7 +66,7 @@ export function Confirm({ open, onOpenChange, title, text, action, danger, onCon
           <RDialog.Title className="m-0 text-base font-semibold">{title}</RDialog.Title>
           <RDialog.Description className="muted mt-1.5 text-[13px]">{text}</RDialog.Description>
           <div className="mt-5 flex justify-end gap-2">
-            <RDialog.Close asChild><Button>Cancelar</Button></RDialog.Close>
+            <RDialog.Close asChild><Button>{t('cancel')}</Button></RDialog.Close>
             <Button tone={danger ? 'er' : 'pink'} lit onClick={() => { onConfirm(); onOpenChange(false) }}>{action}</Button>
           </div>
         </RDialog.Content>
@@ -76,6 +78,7 @@ export function Confirm({ open, onOpenChange, title, text, action, danger, onCon
 /** Pide un texto (mensaje, nombre de perfil...). */
 export function Prompt({ open, onOpenChange, title, label, placeholder, action, onSubmit }:
   { open: boolean; onOpenChange: (v: boolean) => void; title: string; label: string; placeholder?: string; action: string; onSubmit: (v: string) => void }) {
+  const { t } = useT()
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <RDialog.Portal>
@@ -91,7 +94,7 @@ export function Prompt({ open, onOpenChange, title, label, placeholder, action, 
             <textarea name="v" required autoFocus placeholder={placeholder} rows={3}
               className="mt-3 w-full resize-none rounded-lg border border-line bg-transparent p-2.5 text-[13px] text-fg" />
             <div className="mt-4 flex justify-end gap-2">
-              <RDialog.Close asChild><Button type="button">Cancelar</Button></RDialog.Close>
+              <RDialog.Close asChild><Button type="button">{t('cancel')}</Button></RDialog.Close>
               <Button type="submit" tone="green" lit>{action}</Button>
             </div>
           </form>

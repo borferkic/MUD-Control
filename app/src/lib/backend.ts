@@ -16,24 +16,24 @@ function call<T>(action: string, args?: Record<string, unknown>): Promise<T> {
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
-const JSON_FILTER = [{ name: 'Configuración de MUD Control', extensions: ['json'] }]
 
 // Dialogos de archivo nativos; en el navegador se usa una ruta de ejemplo.
-async function pickSave(defaultPath: string): Promise<string | null> {
+const jsonFilter = (name: string) => [{ name, extensions: ['json'] }]
+async function pickSave(defaultPath: string, filterName: string): Promise<string | null> {
   if (!inTauri) return defaultPath
   const { save } = await import('@tauri-apps/plugin-dialog')
-  return save({ defaultPath, filters: JSON_FILTER })
+  return save({ defaultPath, filters: jsonFilter(filterName) })
 }
-async function pickOpen(): Promise<string | null> {
+async function pickOpen(filterName: string): Promise<string | null> {
   if (!inTauri) return 'mud-control.json'
   const { open } = await import('@tauri-apps/plugin-dialog')
-  const r = await open({ multiple: false, filters: JSON_FILTER })
+  const r = await open({ multiple: false, filters: jsonFilter(filterName) })
   return typeof r === 'string' ? r : null
 }
-async function pickFolder(): Promise<string | null> {
+async function pickFolder(title: string): Promise<string | null> {
   if (!inTauri) return 'E:\\'
   const { open } = await import('@tauri-apps/plugin-dialog')
-  const r = await open({ directory: true, title: 'Elige el USB o la carpeta donde guardar la copia' })
+  const r = await open({ directory: true, title })
   return typeof r === 'string' ? r : null
 }
 
@@ -59,10 +59,10 @@ export const api = {
   createBackup: (reason: string) => call<Backup>('create_backup', { reason }),
   restoreBackup: (id: string) => call<void>('restore_backup', { id }),
   /** Devuelve la carpeta donde quedo la copia, o null si se cancelo. */
-  backupToFolder: async () => { const p = await pickFolder(); return p ? call<string>('backup_to_folder', { path: p }) : null },
-  exportConfig: async () => { const p = await pickSave(`mud-control-${today()}.json`); return p ? call<string>('export_config', { path: p }) : null },
+  backupToFolder: async (title: string) => { const p = await pickFolder(title); return p ? call<string>('backup_to_folder', { path: p }) : null },
+  exportConfig: async (filterName: string) => { const p = await pickSave(`mud-control-${today()}.json`, filterName); return p ? call<string>('export_config', { path: p }) : null },
   /** Devuelve las cuentas del archivo que no existen en este equipo, o null si se cancelo. */
-  importConfig: async () => { const p = await pickOpen(); return p ? (await call<{ missing: string[] }>('import_config', { path: p })).missing : null },
+  importConfig: async (filterName: string) => { const p = await pickOpen(filterName); return p ? (await call<{ missing: string[] }>('import_config', { path: p })).missing : null },
 
   activity: (limit = 50) => call<ActivityEvent[]>('get_activity', { limit }),
   supportReport: () => call<string | null>('support_report'),

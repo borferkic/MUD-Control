@@ -47,6 +47,8 @@ export interface Backup {
   id: string
   date: string
   reason: string
+  reasonKey?: string
+  reasonParams?: Record<string, string>
 }
 
 export type ActivityKind = 'ok' | 'backup' | 'access' | 'export' | 'warning' | 'message' | 'update' | 'error'
@@ -54,7 +56,10 @@ export type ActivityKind = 'ok' | 'backup' | 'access' | 'export' | 'warning' | '
 export interface ActivityEvent {
   date: string
   kind: ActivityKind
+  /** Texto en espanol (para registros antiguos); la interfaz traduce con key + params. */
   text: string
+  key?: string
+  params?: Record<string, string>
 }
 
 export interface Settings {

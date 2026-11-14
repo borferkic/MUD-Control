@@ -7,16 +7,11 @@ import { useApp, type TabId } from '../App'
 import { Button, Prompt, tone, type Tone } from '../components/ui'
 import { api, onFixStep } from '../lib/backend'
 import { longDate, when } from '../lib/format'
+import { useT, type Key } from '../lib/i18n'
 import type { FixStep } from '../lib/types'
 import { useLoad } from '../lib/useLoad'
 
-const STEPS: [FixStep, string][] = [
-  ['check', 'Revisando el equipo'],
-  ['search', 'Buscando la solución'],
-  ['backup', 'Guardando una copia de seguridad'],
-  ['apply', 'Aplicando la solución'],
-  ['verify', 'Comprobando que funciona'],
-]
+const STEPS: FixStep[] = ['check', 'search', 'backup', 'apply', 'verify']
 
 function Tile({ icon: I, title, sub, t, to, onClick }: { icon: Icon; title: string; sub: string; t: Tone; to?: TabId; onClick?: () => void }) {
   const { go } = useApp()
@@ -34,13 +29,14 @@ function Tile({ icon: I, title, sub, t, to, onClick }: { icon: Icon; title: stri
 
 export function Home() {
   const { notify, fail, refresh } = useApp()
+  const { t, lang } = useT()
   const [status, reload] = useLoad(api.status, 30000)
   const [step, setStep] = useState<number>(-1)
   const [msg, setMsg] = useState(false)
 
   useEffect(() => {
     let off: (() => void) | undefined
-    onFixStep(s => setStep(STEPS.findIndex(x => x[0] === s))).then(f => (off = f))
+    onFixStep(s => setStep(STEPS.indexOf(s))).then(f => (off = f))
     return () => off?.()
   }, [])
 
@@ -48,29 +44,29 @@ export function Home() {
     setStep(0)
     try {
       const ok = await api.fix()
-      notify(ok ? 'Listo: ya pueden entrar varias personas otra vez' : 'No se pudo arreglar todavía. Se volverá a intentar solo.')
+      notify(t(ok ? 'home.fixed' : 'home.notFixed'))
     } catch (e) { fail(e) }
     setStep(-1); reload(); refresh()
   }
 
   async function check() {
     await reload()
-    notify('Comprobado')
+    notify(t('home.checked'))
   }
 
   if (step >= 0) {
     return (
       <div className="rounded-2xl border border-line bg-card p-5">
-        <p className="m-0 text-center text-base font-semibold">Arreglando…</p>
-        <p className="muted mb-3 text-center">Las personas conectadas se desconectarán unos segundos y podrán volver a entrar.</p>
-        {STEPS.map(([k, label], i) => {
+        <p className="m-0 text-center text-base font-semibold">{t('home.fixing')}</p>
+        <p className="muted mb-3 text-center">{t('home.fixingSub')}</p>
+        {STEPS.map((k, i) => {
           const I = i < step ? IconCircleCheck : i === step ? IconLoader2 : IconCircle
           return (
             <div key={k} className="row">
               <span className="flex items-center gap-2.5">
                 <I size={18} className={i === step ? 'animate-spin' : ''}
                   style={{ color: i < step ? 'var(--ok)' : i === step ? 'var(--ac)' : 'var(--mu)' }} />
-                {label}
+                {t(`step.${k}` as Key)}
               </span>
             </div>
           )
@@ -79,14 +75,14 @@ export function Home() {
     )
   }
 
-  if (!status) return <p className="muted">Revisando el equipo…</p>
+  if (!status) return <p className="muted">{t('home.checking')}</p>
 
   const bad = status.health !== 'ok'
-  const title = status.health === 'not_installed' ? 'MUD Control aún no está instalado en este equipo'
-    : bad ? 'Ahora solo puede entrar una persona' : 'Todo funciona bien'
-  const sub = status.health === 'not_installed' ? 'Pide a tu especialista que haga la instalación.'
-    : bad ? 'Windows se actualizó y desactivó las conexiones múltiples. Se arregla con un clic.'
-    : `${status.connected} ${status.connected === 1 ? 'persona conectada' : 'personas conectadas'} ahora · pueden entrar hasta ${status.maxSessions} a la vez`
+  const n = status.connected
+  const title = t(status.health === 'not_installed' ? 'home.notInstalled' : bad ? 'home.broken' : 'home.ok')
+  const sub = status.health === 'not_installed' ? t('home.notInstalledSub')
+    : bad ? t('home.brokenSub')
+    : t('home.okSub', { n, people: t(n === 1 ? 'people.connected.one' : 'people.connected.many'), max: status.maxSessions })
 
   return (
     <>
@@ -94,22 +90,25 @@ export function Home() {
         {bad ? <IconAlertTriangle size={34} style={{ color: 'var(--wa)' }} /> : <IconCircleCheck size={34} style={{ color: 'var(--ok)' }} />}
         <div className="flex-1"><p className="m-0 text-base font-semibold">{title}</p><p className="muted m-0">{sub}</p></div>
         {status.health !== 'not_installed' && (
-          <Button primary onClick={bad ? fix : check}>{bad ? 'Arreglar ahora' : 'Comprobar'}</Button>
+          <Button primary onClick={bad ? fix : check}>{t(bad ? 'home.fix' : 'home.check')}</Button>
         )}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2.5">
-        <Tile icon={IconUsers} title="Conectados" t="cyan" to="conectados" sub={`${status.connected} ${status.connected === 1 ? 'persona' : 'personas'} ahora`} />
-        <Tile icon={IconKey} title="Accesos" t="yellow" to="accesos" sub={`${status.accessCount} ${status.accessCount === 1 ? 'persona puede' : 'personas pueden'} entrar`} />
-        <Tile icon={IconMessage} title="Avisar a todos" t="green" sub="Enviar un mensaje" onClick={() => setMsg(true)} />
-        <Tile icon={IconShieldCheck} title="Copias de seguridad" t="pink" to="ajustes" sub={status.lastBackup ? `La última es de ${when(status.lastBackup).toLowerCase()}` : 'Aún no hay copias'} />
-        <Tile icon={IconCalendarPause} title="Actualizaciones de Windows" t="orange" to="ajustes"
-          sub={status.updatesPausedUntil ? `En pausa hasta el ${longDate(status.updatesPausedUntil)}` : 'Se instalan con normalidad'} />
-        <Tile icon={IconLifebuoy} title="Pedir ayuda" t="purple" sub="Crear un informe para soporte"
-          onClick={() => api.supportReport().then(p => p && notify(`Informe guardado en ${p}`)).catch(fail)} />
+        <Tile icon={IconUsers} title={t('tile.connected')} t="cyan" to="conectados"
+          sub={t('tile.connectedSub', { n, people: t(n === 1 ? 'people.one' : 'people.many') })} />
+        <Tile icon={IconKey} title={t('tile.access')} t="yellow" to="accesos"
+          sub={status.accessCount === 1 ? t('tile.accessSub.one') : t('tile.accessSub.many', { n: status.accessCount })} />
+        <Tile icon={IconMessage} title={t('tile.notify')} t="green" sub={t('tile.notifySub')} onClick={() => setMsg(true)} />
+        <Tile icon={IconShieldCheck} title={t('tile.backups')} t="pink" to="ajustes"
+          sub={status.lastBackup ? t('tile.backupsSub', { when: when(status.lastBackup, lang).toLowerCase() }) : t('tile.backupsNone')} />
+        <Tile icon={IconCalendarPause} title={t('tile.updates')} t="orange" to="ajustes"
+          sub={status.updatesPausedUntil ? t('tile.updatesPaused', { date: longDate(status.updatesPausedUntil, lang) }) : t('tile.updatesOn')} />
+        <Tile icon={IconLifebuoy} title={t('tile.help')} t="purple" sub={t('tile.helpSub')}
+          onClick={() => api.supportReport().then(p => p && notify(t('report.saved', { path: p }))).catch(fail)} />
       </div>
-      <Prompt open={msg} onOpenChange={setMsg} title="Avisar a todos" label="Les aparecerá este mensaje en su pantalla."
-        placeholder="En 5 minutos se reinicia el equipo. Guarden su trabajo." action="Enviar"
-        onSubmit={t => api.sendMessage(null, t).then(() => notify('Aviso enviado')).catch(fail)} />
+      <Prompt open={msg} onOpenChange={setMsg} title={t('notify.title')} label={t('notify.label')}
+        placeholder={t('notify.placeholder')} action={t('send')}
+        onSubmit={v => api.sendMessage(null, v).then(() => notify(t('notify.sent'))).catch(fail)} />
     </>
   )
 }

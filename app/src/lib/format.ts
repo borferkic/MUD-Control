@@ -1,28 +1,37 @@
-// Fechas en lenguaje cotidiano ("hace 2 horas", "Hoy, 9:14").
-const rtf = new Intl.RelativeTimeFormat('es', { numeric: 'auto' })
-const time = new Intl.DateTimeFormat('es', { hour: 'numeric', minute: '2-digit' })
-const day = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'long' })
-const dayShort = new Intl.DateTimeFormat('es', { day: 'numeric', month: 'short' })
+// Fechas en lenguaje cotidiano ("hace 2 horas", "Hoy, 9:14") en el idioma de la app.
+import { translate, type Lang } from './i18n'
 
-export function ago(iso: string): string {
+const loc = (l: Lang) => (l === 'es' ? 'es' : 'en')
+
+export function ago(iso: string, lang: Lang): string {
+  const rtf = new Intl.RelativeTimeFormat(loc(lang), { numeric: 'auto' })
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
-  if (min < 1) return 'ahora mismo'
+  if (min < 1) return translate(lang, 'date.now')
   if (min < 60) return rtf.format(-min, 'minute')
   if (min < 1440) return rtf.format(-Math.round(min / 60), 'hour')
   return rtf.format(-Math.round(min / 1440), 'day')
 }
 
-export function when(iso: string, short = false): string {
-  const d = new Date(iso)
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const diff = Math.floor((today.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86400000)
-  if (diff === 0) return `Hoy, ${time.format(d)}`
-  if (diff === 1) return `Ayer, ${time.format(d)}`
-  return short ? `${dayShort.format(d)}, ${time.format(d)}` : day.format(d)
+/** Duracion sin "hace": "2 horas" / "2 hours". */
+export function duration(iso: string, lang: Lang): string {
+  const min = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000))
+  const [v, unit] = min < 60 ? [min, 'minute'] : min < 1440 ? [Math.round(min / 60), 'hour'] : [Math.round(min / 1440), 'day']
+  return new Intl.NumberFormat(loc(lang), { style: 'unit', unit, unitDisplay: 'long' }).format(v)
 }
 
-export function longDate(yyyyMmDd: string): string {
-  return day.format(new Date(yyyyMmDd + 'T12:00:00'))
+export function when(iso: string, lang: Lang, short = false): string {
+  const d = new Date(iso)
+  const time = new Intl.DateTimeFormat(loc(lang), { hour: 'numeric', minute: '2-digit' }).format(d)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const diff = Math.floor((today.getTime() - new Date(d).setHours(0, 0, 0, 0)) / 86400000)
+  if (diff === 0) return translate(lang, 'date.today', { time })
+  if (diff === 1) return translate(lang, 'date.yesterday', { time })
+  const day = new Intl.DateTimeFormat(loc(lang), { day: 'numeric', month: short ? 'short' : 'long' }).format(d)
+  return short ? `${day}, ${time}` : day
+}
+
+export function longDate(yyyyMmDd: string, lang: Lang): string {
+  return new Intl.DateTimeFormat(loc(lang), { day: 'numeric', month: 'long' }).format(new Date(yyyyMmDd + 'T12:00:00'))
 }
 
 export function initials(name: string): string {

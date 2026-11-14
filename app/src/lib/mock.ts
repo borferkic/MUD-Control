@@ -22,17 +22,17 @@ let settings: Settings = { autoFix: true, notify: true, autoUpdateApp: true }
 let spec: SpecialistSettings = { port: 3389, maxSessions: 20, nla: false, firewallPrivate: true, firewallPublic: false, shadow: true }
 let paused: string | null = '2026-12-18'
 let backups: Backup[] = [
-  { id: 'b3', date: ago(30), reason: 'Antes de arreglar las conexiones' },
-  { id: 'b2', date: ago(2 * 1440), reason: 'Antes de una actualización de Windows' },
-  { id: 'b1', date: ago(3 * 1440), reason: 'Guardada a mano' },
+  { id: 'b3', date: ago(30), reason: 'Antes de arreglar las conexiones', reasonKey: 'fix' },
+  { id: 'b2', date: ago(2 * 1440), reason: 'Antes de actualizar los datos de Windows', reasonKey: 'before_ini' },
+  { id: 'b1', date: ago(3 * 1440), reason: 'Guardada a mano', reasonKey: 'manual' },
 ]
 let activity: ActivityEvent[] = [
-  { date: ago(29), kind: 'ok', text: 'Las conexiones múltiples volvieron a funcionar' },
-  { date: ago(30), kind: 'backup', text: 'Se guardó una copia de seguridad antes de arreglar' },
-  { date: ago(1000), kind: 'access', text: 'Se dio acceso a Luis Pérez' },
-  { date: ago(1010), kind: 'export', text: 'Se exportó la configuración' },
-  { date: ago(2 * 1440), kind: 'warning', text: 'Windows se actualizo: solo podía entrar una persona' },
-  { date: ago(3 * 1440), kind: 'message', text: 'Se envió un aviso a todos los conectados' },
+  { date: ago(29), kind: 'ok', text: 'Las conexiones múltiples volvieron a funcionar', key: 'fix_ok' },
+  { date: ago(30), kind: 'backup', text: 'Se guardó una copia de seguridad antes de arreglar', key: 'fix_backup' },
+  { date: ago(1000), kind: 'access', text: 'Se dio acceso a Luis Pérez', key: 'grant', params: { name: 'Luis Pérez' } },
+  { date: ago(1010), kind: 'export', text: 'Se exportó la configuración', key: 'export' },
+  { date: ago(2 * 1440), kind: 'warning', text: 'Windows se actualizó: solo podía entrar una persona', key: 'fix_pending' },
+  { date: ago(3 * 1440), kind: 'message', text: 'Se envió un aviso a todos los conectados', key: 'msg_all' },
 ]
 const log = (kind: ActivityEvent['kind'], text: string) => activity.unshift({ date: new Date().toISOString(), kind, text })
 

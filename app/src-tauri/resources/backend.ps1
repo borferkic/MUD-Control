@@ -34,8 +34,9 @@ foreach ($d in $Data, $Backups, $Profiles) { if (-not (Test-Path $d)) { New-Item
 
 # ----------------------------------------------------------------- utilidades
 function TLog([string]$m) { try { Add-Content $TechLog ((Get-Date).ToString('s') + "  [$Action] $m") -Encoding UTF8 } catch {} }
-function Activity([string]$kind, [string]$text) {
-    $line = [ordered]@{ date = (Get-Date).ToUniversalTime().ToString('o'); kind = $kind; text = $text } | ConvertTo-Json -Compress
+# text = espanol (registro legible); key + params = la interfaz lo traduce al idioma elegido.
+function Activity([string]$kind, [string]$text, [string]$key = '', [hashtable]$params = @{}) {
+    $line = [ordered]@{ date = (Get-Date).ToUniversalTime().ToString('o'); kind = $kind; text = $text; key = $key; params = $params } | ConvertTo-Json -Compress
     Add-Content -Path $ActLog -Value $line -Encoding UTF8
 }
 function Step([string]$s) { [Console]::Out.WriteLine("STEP:$s"); [Console]::Out.Flush() }
@@ -209,7 +210,7 @@ function ApplyProfile($p) {
 }
 
 # ------------------------------------------------------------ copias de seguridad
-function NewBackup([string]$reason) {
+function NewBackup([string]$reason, [string]$key = '', [hashtable]$params = @{}) {
     $id = (Get-Date).ToString('yyyyMMdd-HHmmss')
     $dir = Join-Path $Backups $id
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
@@ -217,7 +218,7 @@ function NewBackup([string]$reason) {
     cmd /c "reg export `"HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server`" `"$dir\terminal-server.reg`" /y >nul 2>&1"
     cmd /c "reg export `"HKLM\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services`" `"$dir\politicas.reg`" /y >nul 2>&1"
     [IO.File]::WriteAllText((Join-Path $dir 'perfil.json'), ((CurrentProfile (Settings).profile) | ConvertTo-Json), $Utf8)
-    $meta = [ordered]@{ id = $id; date = (Get-Date).ToUniversalTime().ToString('o'); reason = $reason }
+    $meta = [ordered]@{ id = $id; date = (Get-Date).ToUniversalTime().ToString('o'); reason = $reason; reasonKey = $key; reasonParams = $params }
     [IO.File]::WriteAllText((Join-Path $dir 'meta.json'), ($meta | ConvertTo-Json), $Utf8)
     # Retencion: ultimas 20
     Get-ChildItem $Backups -Directory | Sort-Object Name -Descending | Select-Object -Skip 20 | Remove-Item -Recurse -Force
@@ -270,16 +271,16 @@ function Fix {
     $bundled = Join-Path $Res 'rdpwrap.ini'
     $needBundled = (-not (IniHas $WrapIni $ver)) -and (IniHas $bundled $ver)
     Step 'backup'
-    NewBackup 'Antes de arreglar las conexiones' | Out-Null
-    Activity 'backup' 'Se guardó una copia de seguridad antes de arreglar'
+    NewBackup 'Antes de arreglar las conexiones' 'fix' | Out-Null
+    Activity 'backup' 'Se guardó una copia de seguridad antes de arreglar' 'fix_backup'
     Step 'apply'
     if ($needBundled) { Copy-Item $bundled $WrapIni -Force; TLog "INI de la app aplicado para $ver" }
     $rc = RunBat 'fix-rdpwrap.bat' '/silent'
     Step 'verify'
     $ok = ($rc -eq 0)
-    if ($ok) { Activity 'ok' 'Las conexiones múltiples volvieron a funcionar' }
-    elseif ($rc -eq 7) { Activity 'warning' 'Todavía no hay solución para esta versión de Windows. Se volverá a intentar solo.' }
-    else { Activity 'error' "No se pudo arreglar (código $rc)" }
+    if ($ok) { Activity 'ok' 'Las conexiones múltiples volvieron a funcionar' 'fix_ok' }
+    elseif ($rc -eq 7) { Activity 'warning' 'Todavía no hay solución para esta versión de Windows. Se volverá a intentar solo.' 'fix_pending' }
+    else { Activity 'error' "No se pudo arreglar (código $rc)" 'fix_error' @{ code = "$rc" } }
     return $ok
 }
 
@@ -322,18 +323,18 @@ try {
         'list_sessions'     { @(Sessions) }
         'send_message'      {
             $text = [string]$A.text
-            if ($null -eq $A.id) { cmd /c "msg * /TIME:0 `"$($text -replace '"','')`"" ; Activity 'message' 'Se envió un aviso a todos los conectados' }
-            else { cmd /c "msg $([int]$A.id) /TIME:0 `"$($text -replace '"','')`""; Activity 'message' 'Se envió un mensaje a una persona conectada' }
+            if ($null -eq $A.id) { cmd /c "msg * /TIME:0 `"$($text -replace '"','')`"" ; Activity 'message' 'Se envió un aviso a todos los conectados' 'msg_all' }
+            else { cmd /c "msg $([int]$A.id) /TIME:0 `"$($text -replace '"','')`""; Activity 'message' 'Se envió un mensaje a una persona conectada' 'msg_one' }
             $null
         }
         'logoff_session'    {
             $s = Sessions | Where-Object { $_.id -eq [int]$A.id }
-            logoff ([int]$A.id); Activity 'access' "Se cerró la sesión de $($s.user)"; $null
+            logoff ([int]$A.id); Activity 'access' "Se cerró la sesión de $($s.user)" 'logoff' @{ name = "$($s.user)" }; $null
         }
         'list_access'       { @(AccessList) }
         'list_local_users'  { @(LocalUsers) }
-        'grant_access'      { Add-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se dio acceso a $(DisplayName $A.name)"; $null }
-        'revoke_access'     { Remove-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se quitó el acceso a $(DisplayName $A.name)"; $null }
+        'grant_access'      { Add-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se dio acceso a $(DisplayName $A.name)" 'grant' @{ name = "$(DisplayName $A.name)" }; $null }
+        'revoke_access'     { Remove-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se quitó el acceso a $(DisplayName $A.name)" 'revoke' @{ name = "$(DisplayName $A.name)" }; $null }
         'get_settings'      { $s = Settings; [ordered]@{ autoFix = [bool]$s.autoFix; notify = [bool]$s.notify; autoUpdateApp = [bool]$s.autoUpdateApp } }
         'save_settings'     {
             $s = Settings; foreach ($k in 'autoFix', 'notify', 'autoUpdateApp') { $s[$k] = [bool]$A.settings.$k }; SaveSettings $s
@@ -342,40 +343,40 @@ try {
             $null
         }
         'pause_updates'     {
-            if ($A.until) { $rc = RunBat 'bloquear-actualizaciones.bat' "/hasta:$($A.until) /silent"; Activity 'update' "Actualizaciones de Windows en pausa hasta el $($A.until)" }
-            else { $rc = RunBat 'bloquear-actualizaciones.bat' '/desbloquear /silent'; Activity 'update' 'Se reanudaron las actualizaciones de Windows' }
+            if ($A.until) { $rc = RunBat 'bloquear-actualizaciones.bat' "/hasta:$($A.until) /silent"; Activity 'update' "Actualizaciones de Windows en pausa hasta el $($A.until)" 'pause' @{ date = "$($A.until)" } }
+            else { $rc = RunBat 'bloquear-actualizaciones.bat' '/desbloquear /silent'; Activity 'update' 'Se reanudaron las actualizaciones de Windows' 'resume' }
             if ($rc -ne 0) { throw "bloquear-actualizaciones termino con $rc" }; $null
         }
         'list_backups'      { @(BackupList) }
-        'create_backup'     { $b = NewBackup ([string]$A.reason); Activity 'backup' 'Se guardó una copia de seguridad'; $b }
+        'create_backup'     { $b = NewBackup ([string]$A.reason) 'manual'; Activity 'backup' 'Se guardó una copia de seguridad' 'backup'; $b }
         'restore_backup'    {
             $dir = Join-Path $Backups ([string]$A.id)
             if (-not (Test-Path (Join-Path $dir 'meta.json'))) { throw "No existe la copia $($A.id)" }
-            NewBackup 'Antes de volver a una copia' | Out-Null
+            NewBackup 'Antes de volver a una copia' 'before_restore' | Out-Null
             if (Test-Path "$dir\rdpwrap.ini") { Copy-Item "$dir\rdpwrap.ini" $WrapIni -Force }
             foreach ($r in 'terminal-server.reg', 'politicas.reg') { if (Test-Path "$dir\$r") { cmd /c "reg import `"$dir\$r`" >nul 2>&1" } }
             if (Test-Path "$dir\perfil.json") { ApplyProfile (Get-Content "$dir\perfil.json" -Raw | ConvertFrom-Json) | Out-Null }
             EnforceSingleSession; RestartRdp
-            Activity 'backup' 'Se volvió a una copia de seguridad'; $null
+            Activity 'backup' 'Se volvió a una copia de seguridad' 'restore'; $null
         }
         'backup_to_folder'  {
             $dst = Join-Path ([string]$A.path) 'MUD-Control'
-            $b = NewBackup 'Copia en USB o carpeta externa'
+            $b = NewBackup 'Copia en USB o carpeta externa' 'usb'
             New-Item -ItemType Directory -Path $dst -Force | Out-Null
             Copy-Item (Join-Path $Backups $b.id) $dst -Recurse -Force
-            Activity 'backup' "Se guardó una copia en $dst"; $dst
+            Activity 'backup' "Se guardó una copia en $dst" 'backup_folder' @{ path = "$dst" }; $dst
         }
         'export_config'     {
             $p = CurrentProfile (Settings).profile
             [IO.File]::WriteAllText([string]$A.path, ($p | ConvertTo-Json), $Utf8)
-            Activity 'export' 'Se exportó la configuración'; [string]$A.path
+            Activity 'export' 'Se exportó la configuración' 'export'; [string]$A.path
         }
         'import_config'     {
             $p = Get-Content ([string]$A.path) -Raw | ConvertFrom-Json
             if (-not ($p.PSObject.Properties.Name -contains 'Puerto')) { throw 'El archivo no es una configuración de MUD Control.' }
-            NewBackup 'Antes de importar una configuración' | Out-Null
+            NewBackup 'Antes de importar una configuración' 'before_import' | Out-Null
             $missing = ApplyProfile $p
-            Activity 'export' "Se importó la configuración $($p.Nombre)"
+            Activity 'export' "Se importó la configuración $($p.Nombre)" 'import' @{ name = "$($p.Nombre)" }
             [ordered]@{ missing = @($missing) }
         }
         'get_activity'      {
@@ -384,7 +385,7 @@ try {
         }
         'support_report'    { SupportReport }
         'get_specialist'    { Specialist }
-        'save_specialist'   { NewBackup 'Antes de cambiar conexión y seguridad' | Out-Null; ApplySpecialist $A.settings; Activity 'update' 'Se cambiaron opciones de conexión y seguridad'; $null }
+        'save_specialist'   { NewBackup 'Antes de cambiar conexión y seguridad' 'before_specialist' | Out-Null; ApplySpecialist $A.settings; Activity 'update' 'Se cambiaron opciones de conexión y seguridad' 'specialist'; $null }
         'list_profiles'     {
             $active = (Settings).profile
             $list = @(Get-ChildItem $Profiles -Filter *.json -ErrorAction SilentlyContinue | ForEach-Object {
@@ -401,21 +402,21 @@ try {
             $name = ([string]$A.name).Trim()
             $file = Join-Path $Profiles (($name -replace '[^\w\- ]', '_') + '.json')
             [IO.File]::WriteAllText($file, ((CurrentProfile $name) | ConvertTo-Json), $Utf8)
-            Activity 'export' "Se creó el perfil $name"; $null
+            Activity 'export' "Se creó el perfil $name" 'profile_new' @{ name = "$name" }; $null
         }
         'activate_profile'  {
             $f = Get-ChildItem $Profiles -Filter *.json | Where-Object { (Get-Content $_.FullName -Raw | ConvertFrom-Json).Nombre -eq $A.name } | Select-Object -First 1
             if (-not $f) { throw "No existe el perfil $($A.name)" }
-            NewBackup "Antes de aplicar el perfil $($A.name)" | Out-Null
+            NewBackup "Antes de aplicar el perfil $($A.name)" 'before_profile' @{ name = "$($A.name)" } | Out-Null
             ApplyProfile (Get-Content $f.FullName -Raw | ConvertFrom-Json) | Out-Null
-            Activity 'update' "Se aplicó el perfil $($A.name)"; $null
+            Activity 'update' "Se aplicó el perfil $($A.name)" 'profile_apply' @{ name = "$($A.name)" }; $null
         }
-        'update_ini'        { NewBackup 'Antes de actualizar los datos de Windows' | Out-Null; $rc = RunBat 'fix-rdpwrap.bat' '/silent'; Activity ($(if ($rc -eq 0) { 'ok' } else { 'warning' })) 'Se buscaron datos nuevos para esta versión de Windows'; ($rc -eq 0) }
-        'generate_offsets'  { NewBackup 'Antes de generar offsets' | Out-Null; $rc = RunBat 'fix-rdpwrap.bat' '/finder /silent'; if ($rc -eq 8) { throw 'Microsoft Defender bloqueó el generador de offsets.' }; Activity 'update' 'Se generaron offsets en este equipo'; ($rc -eq 0) }
-        'repair_windows_update' { $rc = RunBat 'reparar-windowsupdate.bat' '/auto'; Activity 'update' 'Se reparó Windows Update'; $null }
+        'update_ini'        { NewBackup 'Antes de actualizar los datos de Windows' 'before_ini' | Out-Null; $rc = RunBat 'fix-rdpwrap.bat' '/silent'; Activity ($(if ($rc -eq 0) { 'ok' } else { 'warning' })) 'Se buscaron datos nuevos para esta versión de Windows' 'ini'; ($rc -eq 0) }
+        'generate_offsets'  { NewBackup 'Antes de generar offsets' 'before_offsets' | Out-Null; $rc = RunBat 'fix-rdpwrap.bat' '/finder /silent'; if ($rc -eq 8) { throw 'Microsoft Defender bloqueó el generador de offsets.' }; Activity 'update' 'Se generaron offsets en este equipo' 'offsets'; ($rc -eq 0) }
+        'repair_windows_update' { $rc = RunBat 'reparar-windowsupdate.bat' '/auto'; Activity 'update' 'Se reparó Windows Update' 'wu'; $null }
         'open_logs'         { Start-Process explorer.exe $Data; $null }
-        'reinstall'         { NewBackup 'Antes de reinstalar' | Out-Null; RunKit 1; EnforceSingleSession; Activity 'update' 'Se reinstaló RDP Wrapper'; $null }
-        'uninstall'         { NewBackup 'Antes de desinstalar' | Out-Null; RunKit 5; Activity 'warning' 'Se desinstaló RDP Wrapper: solo puede entrar una persona'; $null }
+        'reinstall'         { NewBackup 'Antes de reinstalar' 'before_reinstall' | Out-Null; RunKit 1; EnforceSingleSession; Activity 'update' 'Se reinstaló RDP Wrapper' 'reinstall'; $null }
+        'uninstall'         { NewBackup 'Antes de desinstalar' 'before_uninstall' | Out-Null; RunKit 5; Activity 'warning' 'Se desinstaló RDP Wrapper: solo puede entrar una persona' 'uninstall'; $null }
         default             { throw "Accion desconocida: $Action" }
     }
     Out-Result $result

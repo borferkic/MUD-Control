@@ -29,8 +29,8 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "publisher": "MUD Control",
-    "copyright": "Apache-2.0. Basado en RDP Wrapper Library (Stas'M Corp.)",
+    "publisher": "Boris SdK",
+    "copyright": "© 2026 Boris SdK. Apache-2.0. Basado en RDP Wrapper Library (Stas'M Corp.)",
     "category": "Utility",
     "shortDescription": "Varias personas conectadas a la vez por Escritorio remoto",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
@@ -39,7 +39,7 @@
       "webviewInstallMode": { "type": "embedBootstrapper" },
       "nsis": {
         "installMode": "perMachine",
-        "languages": ["Spanish"],
+        "languages": ["Spanish", "English"],
         "installerIcon": "icons/icon.ico"
       }
     }
