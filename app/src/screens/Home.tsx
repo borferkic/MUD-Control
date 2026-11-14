@@ -4,7 +4,7 @@ import {
 } from '@tabler/icons-react'
 import { useEffect, useState } from 'react'
 import { useApp, type TabId } from '../App'
-import { Button, Prompt, tone, type Tone } from '../components/ui'
+import { Button, Confirm, Prompt, tone, type Tone } from '../components/ui'
 import { api, onFixStep } from '../lib/backend'
 import { longDate, when } from '../lib/format'
 import { useT, type Key } from '../lib/i18n'
@@ -28,11 +28,13 @@ function Tile({ icon: I, title, sub, t, to, onClick }: { icon: Icon; title: stri
 }
 
 export function Home() {
-  const { notify, fail, refresh } = useApp()
+  const { notify, fail, refresh, fixRequest } = useApp()
   const { t, lang } = useT()
   const [status, reload] = useLoad(api.status, 30000)
   const [step, setStep] = useState<number>(-1)
   const [msg, setMsg] = useState(false)
+  const [install, setInstall] = useState(false)
+  const [installing, setInstalling] = useState(false)
 
   useEffect(() => {
     let off: (() => void) | undefined
@@ -47,6 +49,19 @@ export function Home() {
       notify(t(ok ? 'home.fixed' : 'home.notFixed'))
     } catch (e) { fail(e) }
     setStep(-1); reload(); refresh()
+  }
+
+  // "Arreglar ahora" desde la bandeja: arregla si hace falta, si no solo comprueba.
+  useEffect(() => {
+    if (!fixRequest) return
+    api.status().then(s => (s.health === 'broken' ? fix() : check())).catch(fail)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fixRequest])
+
+  async function doInstall() {
+    setInstalling(true)
+    try { await api.reinstall(); notify(t('home.installed')) } catch (e) { fail(e) }
+    setInstalling(false); reload(); refresh()
   }
 
   async function check() {
@@ -80,7 +95,7 @@ export function Home() {
   const bad = status.health !== 'ok'
   const n = status.connected
   const title = t(status.health === 'not_installed' ? 'home.notInstalled' : bad ? 'home.broken' : 'home.ok')
-  const sub = status.health === 'not_installed' ? t('home.notInstalledSub')
+  const sub = status.health === 'not_installed' ? t(installing ? 'home.installing' : 'home.installSub')
     : bad ? t('home.brokenSub')
     : t('home.okSub', { n, people: t(n === 1 ? 'people.connected.one' : 'people.connected.many'), max: status.maxSessions })
 
@@ -89,9 +104,9 @@ export function Home() {
       <div className="flex items-center gap-3.5 rounded-2xl border bg-card p-[18px]" style={{ borderColor: bad ? 'var(--wa)' : 'var(--line)' }}>
         {bad ? <IconAlertTriangle size={34} style={{ color: 'var(--wa)' }} /> : <IconCircleCheck size={34} style={{ color: 'var(--ok)' }} />}
         <div className="flex-1"><p className="m-0 text-base font-semibold">{title}</p><p className="muted m-0">{sub}</p></div>
-        {status.health !== 'not_installed' && (
-          <Button primary onClick={bad ? fix : check}>{t(bad ? 'home.fix' : 'home.check')}</Button>
-        )}
+        {status.health === 'not_installed'
+          ? <Button primary disabled={installing} onClick={() => setInstall(true)}>{t('home.install')}</Button>
+          : <Button primary onClick={bad ? fix : check}>{t(bad ? 'home.fix' : 'home.check')}</Button>}
       </div>
       <div className="mt-3 grid grid-cols-3 gap-2.5">
         <Tile icon={IconUsers} title={t('tile.connected')} t="cyan" to="conectados"
@@ -106,6 +121,8 @@ export function Home() {
         <Tile icon={IconLifebuoy} title={t('tile.help')} t="purple" sub={t('tile.helpSub')}
           onClick={() => api.supportReport().then(p => p && notify(t('report.saved', { path: p }))).catch(fail)} />
       </div>
+      <Confirm open={install} onOpenChange={setInstall} title={t('home.confirmInstall')} text={t('home.confirmInstallText')}
+        action={t('home.install')} onConfirm={doInstall} />
       <Prompt open={msg} onOpenChange={setMsg} title={t('notify.title')} label={t('notify.label')}
         placeholder={t('notify.placeholder')} action={t('send')}
         onSubmit={v => api.sendMessage(null, v).then(() => notify(t('notify.sent'))).catch(fail)} />

@@ -73,6 +73,21 @@ function Settings {
     if (Test-Path $SetFile) { (Get-Content $SetFile -Raw | ConvertFrom-Json).PSObject.Properties | ForEach-Object { $s[$_.Name] = $_.Value } }
     $s
 }
+# Iniciar con Windows: tarea programada al iniciar sesion del administrador que lo activa,
+# con privilegios elevados (sin aviso de UAC) y en la bandeja (--tray).
+$AutoTask = 'MUD Control'
+function AutoStartOn { $t = Get-ScheduledTask -TaskName $AutoTask -ErrorAction SilentlyContinue; [bool]($t -and $t.State -ne 'Disabled') }
+function SetAutoStart([bool]$on) {
+    if (-not $on) { Unregister-ScheduledTask -TaskName $AutoTask -Confirm:$false -ErrorAction SilentlyContinue; return }
+    $exe = Join-Path (Split-Path -Parent $Res) 'mud-control.exe'
+    if (-not (Test-Path $exe)) { throw "No se encontro $exe" }
+    $user = "$env:USERDOMAIN\$env:USERNAME"
+    $act = New-ScheduledTaskAction -Execute $exe -Argument '--tray'
+    $trg = New-ScheduledTaskTrigger -AtLogOn -User $user
+    $pri = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+    $set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+    Register-ScheduledTask -TaskName $AutoTask -Action $act -Trigger $trg -Principal $pri -Settings $set -Force | Out-Null
+}
 function SaveSettings($s) { [IO.File]::WriteAllText($SetFile, ($s | ConvertTo-Json), $Utf8) }
 
 # Una sesion por usuario SIEMPRE (no configurable). Registro y directiva.
@@ -335,9 +350,15 @@ try {
         'list_local_users'  { @(LocalUsers) }
         'grant_access'      { Add-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se dio acceso a $(DisplayName $A.name)" 'grant' @{ name = "$(DisplayName $A.name)" }; $null }
         'revoke_access'     { Remove-LocalGroupMember -SID $RdpGroup -Member ([string]$A.name); Activity 'access' "Se quitó el acceso a $(DisplayName $A.name)" 'revoke' @{ name = "$(DisplayName $A.name)" }; $null }
-        'get_settings'      { $s = Settings; [ordered]@{ autoFix = [bool]$s.autoFix; notify = [bool]$s.notify; autoUpdateApp = [bool]$s.autoUpdateApp } }
+        'get_settings'      {
+            $s = Settings
+            # Primera vez: iniciar con Windows activado por defecto.
+            if (-not $s.Contains('autoStartInit')) { try { SetAutoStart $true } catch { TLog "autostart: $($_.Exception.Message)" }; $s.autoStartInit = $true; SaveSettings $s }
+            [ordered]@{ autoFix = [bool]$s.autoFix; notify = [bool]$s.notify; autoUpdateApp = [bool]$s.autoUpdateApp; startWithWindows = (AutoStartOn) }
+        }
         'save_settings'     {
             $s = Settings; foreach ($k in 'autoFix', 'notify', 'autoUpdateApp') { $s[$k] = [bool]$A.settings.$k }; SaveSettings $s
+            if ($null -ne $A.settings.startWithWindows -and [bool]$A.settings.startWithWindows -ne (AutoStartOn)) { SetAutoStart ([bool]$A.settings.startWithWindows) }
             $t = Get-ScheduledTask -TaskName 'RDPWrap-AutoFix' -ErrorAction SilentlyContinue
             if ($t) { if ($s.autoFix) { $t | Enable-ScheduledTask | Out-Null } else { $t | Disable-ScheduledTask | Out-Null } }
             $null

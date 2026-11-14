@@ -1,6 +1,6 @@
 [package]
 name = "mud-control"
-version = "2.0.0"
+version = "2.1.0"
 description = "MUD Control - Multi User Desktops Control"
 edition = "2021"
 license = "Apache-2.0"
@@ -13,9 +13,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

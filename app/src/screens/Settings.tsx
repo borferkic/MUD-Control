@@ -54,6 +54,9 @@ export function SettingsScreen() {
         <Row title={t('set.autoUpdate')}>
           <Switch label={t('set.autoUpdate')} tone="purple" checked={s?.autoUpdateApp ?? false} onChange={v => save({ autoUpdateApp: v })} />
         </Row>
+        <Row title={t('set.startup')} hint={t('set.startupHint')}>
+          <Switch label={t('set.startup')} tone="pink" checked={s?.startWithWindows ?? false} onChange={v => save({ startWithWindows: v })} />
+        </Row>
         <Row title={t('set.language')}>
           <select className="field" style={{ color: 'var(--cyan)' }} value={pref} aria-label={t('set.language')}
             onChange={e => setPref(e.target.value as LangPref)}>

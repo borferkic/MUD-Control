@@ -66,6 +66,7 @@ export interface Settings {
   autoFix: boolean
   notify: boolean
   autoUpdateApp: boolean
+  startWithWindows?: boolean
 }
 
 export interface SpecialistSettings {

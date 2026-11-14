@@ -18,7 +18,7 @@ let access: Access[] = [
   { name: 'lperez', fullName: 'Luis Pérez' },
 ]
 const localUsers: Access[] = [...access, { name: 'mruiz', fullName: 'Marta Ruiz' }, { name: 'contabilidad', fullName: 'Contabilidad' }]
-let settings: Settings = { autoFix: true, notify: true, autoUpdateApp: true }
+let settings: Settings = { autoFix: true, notify: true, autoUpdateApp: true, startWithWindows: true }
 let spec: SpecialistSettings = { port: 3389, maxSessions: 20, nla: false, firewallPrivate: true, firewallPublic: false, shadow: true }
 let paused: string | null = '2026-12-18'
 let backups: Backup[] = [

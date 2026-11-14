@@ -3,7 +3,7 @@ import { IconHistory, IconHome, IconKey, IconSettings, IconUsers } from '@tabler
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { TitleBar } from './components/TitleBar'
 import { About } from './components/About'
-import { inTauri } from './lib/backend'
+import { api, inTauri } from './lib/backend'
 import { I18nCtx, loadPref, savePref, systemLang, translate, type I18n, type Key, type Lang, type LangPref } from './lib/i18n'
 import { Button, Toast, tone, type Tone } from './components/ui'
 import { Activity } from './screens/Activity'
@@ -20,7 +20,7 @@ const TABS: [TabId, Key, typeof IconHome, Tone][] = [
   ['ajustes', 'tab.ajustes', IconSettings, 'green'],
 ]
 
-interface AppCtx { go: (t: TabId) => void; notify: (text: string) => void; fail: (e: unknown) => void; refreshKey: number; refresh: () => void }
+interface AppCtx { go: (t: TabId) => void; notify: (text: string) => void; fail: (e: unknown) => void; refreshKey: number; refresh: () => void; fixRequest: number }
 const Ctx = createContext<AppCtx>(null!)
 export const useApp = () => useContext(Ctx)
 
@@ -32,10 +32,26 @@ export default function App() {
   const [about, setAbout] = useState(q?.has('acerca') ?? false)
   const [toast, setToast] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [fixRequest, setFixRequest] = useState(0)
 
   const [pref, setPrefState] = useState<LangPref>(() => (q?.get('lang') as LangPref) || loadPref())
   const lang: Lang = pref === 'auto' ? systemLang() : pref
   useEffect(() => { document.documentElement.lang = lang }, [lang])
+  // Menu de la bandeja en el idioma elegido, y "Arreglar ahora" desde la bandeja.
+  useEffect(() => {
+    if (!inTauri) return
+    import('@tauri-apps/api/core').then(({ invoke }) => invoke('tray_labels', {
+      tooltip: 'MUD Control', open: translate(lang, 'tray.open'), fix: translate(lang, 'tray.fix'), quit: translate(lang, 'tray.quit'),
+    })).catch(() => {})
+  }, [lang])
+  // Al abrir: el backend aplica los valores de primera vez (iniciar con Windows activado).
+  useEffect(() => { api.settings().catch(() => {}) }, [])
+  useEffect(() => {
+    if (!inTauri) return
+    let off: (() => void) | undefined
+    import('@tauri-apps/api/event').then(({ listen }) => listen('tray-fix', () => { setTab('inicio'); setFixRequest(n => n + 1) })).then(f => (off = f))
+    return () => off?.()
+  }, [])
   const i18n = useMemo<I18n>(() => ({
     lang, pref,
     setPref: p => { savePref(p); setPrefState(p) },
@@ -46,7 +62,7 @@ export default function App() {
   // Nunca mostrar excepciones crudas al usuario final: el detalle va al registro tecnico.
   const fail = useCallback((e: unknown) => { console.error(e); setToast(translate(lang, 'err.generic')) }, [lang])
   const refresh = useCallback(() => setRefreshKey(k => k + 1), [])
-  const ctx = useMemo<AppCtx>(() => ({ go: setTab, notify: setToast, fail, refreshKey, refresh }), [fail, refreshKey, refresh])
+  const ctx = useMemo<AppCtx>(() => ({ go: setTab, notify: setToast, fail, refreshKey, refresh, fixRequest }), [fail, refreshKey, refresh, fixRequest])
   const t = i18n.t
 
   return (

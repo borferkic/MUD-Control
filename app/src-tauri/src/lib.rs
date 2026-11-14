@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Emitter, Manager, WindowEvent};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -107,13 +109,83 @@ async fn backend(app: AppHandle, action: String, args: Value) -> Result<Value, S
     r
 }
 
+// ------------------------------------------------------------------ bandeja
+struct TrayItems {
+    open: MenuItem<tauri::Wry>,
+    fix: MenuItem<tauri::Wry>,
+    quit: MenuItem<tauri::Wry>,
+}
+
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+/// La interfaz traduce el menu de la bandeja cuando cambia el idioma.
+#[tauri::command]
+fn tray_labels(items: tauri::State<'_, TrayItems>, tooltip: String, open: String, fix: String, quit: String, app: AppHandle) {
+    let _ = items.open.set_text(open);
+    let _ = items.fix.set_text(fix);
+    let _ = items.quit.set_text(quit);
+    if let Some(t) = app.tray_by_id("main") {
+        let _ = t.set_tooltip(Some(tooltip));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     app_log("inicio de MUD Control");
+    // --tray: arranque con Windows, sin mostrar la ventana.
+    let hidden = std::env::args().any(|a| a == "--tray");
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![backend])
+        .invoke_handler(tauri::generate_handler![backend, tray_labels])
+        .setup(move |app| {
+            let open = MenuItem::with_id(app, "open", "Abrir MUD Control", true, None::<&str>)?;
+            let fix = MenuItem::with_id(app, "fix", "Arreglar ahora", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
+            let sep = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(app, &[&open, &fix, &sep, &quit])?;
+            let mut tray = TrayIconBuilder::with_id("main")
+                .tooltip("MUD Control")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, e| match e.id.as_ref() {
+                    "open" => show_main(app),
+                    "fix" => {
+                        show_main(app);
+                        let _ = app.emit("tray-fix", ());
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, e| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e {
+                        show_main(tray.app_handle());
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
+            app.manage(TrayItems { open, fix, quit });
+            if !hidden {
+                show_main(app.handle());
+            }
+            Ok(())
+        })
+        // Cerrar (X) esconde la ventana en la bandeja; para salir se usa "Salir".
+        .on_window_event(|w, e| {
+            if let WindowEvent::CloseRequested { api, .. } = e {
+                let _ = w.hide();
+                api.prevent_close();
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error al iniciar MUD Control");
 }
